@@ -100,19 +100,19 @@ if [ $(grep "set timeout=-1" /etc/grub.d/00_header) ]; then
 	yesno "Patch Grub to not wait for user input when booting the system?" answer y
 	if (( $? )); then
 		echo $bold"Patching Grub..."$normal
-		patch /etc/grub.d/00_header <<EOF
---- 00_header	2012-04-17 20:20:48.000000000 +0200
-+++ 00_header-no-timeout	2012-07-10 22:53:26.440676690 +0200
-@@ -233,7 +233,7 @@
- {
-     cat << EOF
- if [ "\${recordfail}" = 1 ]; then
--  set timeout=-1
-+  set timeout=${2}
- else
-   set timeout=${2}
- fi
-EOF
+		patch /etc/grub.d/00_header <<-'EOF'
+			--- 00_header	2012-04-17 20:20:48.000000000 +0200
+			+++ 00_header-no-timeout	2012-07-10 22:53:26.440676690 +0200
+			@@ -233,7 +233,7 @@
+			 {
+				 cat << EOF
+			 if [ "\${recordfail}" = 1 ]; then
+			-  set timeout=-1
+			+  set timeout=${2}
+			 else
+			   set timeout=${2}
+			 fi
+		EOF
 		sudo update-grub
 	fi
 else
@@ -140,7 +140,72 @@ else
 fi
 
 
+# #################
+# SSL configuration
+# #################
+
+if [ ! -a /var/ssl/openssl.cnf ]; then
+	echo $bold"Configuring SSL..."$normal
+	[[ ! -d /var/ssl ]] && sudo mkdir /var/ssl
+	pushd /var/ssl > /dev/null
+	sudo cp /usr/lib/ssl/openssl.cnf .
+	# note how the EOF is enclosed in ticks in order to prevent
+	# substitution in the here document.
+	# Furthermore, the leading dash makes bash remove any leading
+	# tab characters, but not spaces (diff expects there to be 
+	# single spaces).
+	sudo patch openssl.cnf <<-'EOF'
+		--- openssl.cnf	2012-07-16 08:43:20.803312977 +0200
+		+++ openssl-new.cnf	2012-07-16 08:52:25.915511969 +0200
+		@@ -39,7 +39,7 @@
+		 ####################################################################
+		 [ CA_default ]
+		 
+		-dir		= ./demoCA		# Where everything is kept
+		+dir		= /var/ssl		# Where everything is kept
+		 certs		= $dir/certs		# Where the issued certs are kept
+		 crl_dir		= $dir/crl		# Where the issued crl are kept
+		 database	= $dir/index.txt	# database index file.
+		@@ -126,17 +126,17 @@
+		 
+		 [ req_distinguished_name ]
+		 countryName			= Country Name (2 letter code)
+		-countryName_default		= AU
+		+countryName_default		= DE
+		 countryName_min			= 2
+		 countryName_max			= 2
+		 
+		 stateOrProvinceName		= State or Province Name (full name)
+		-stateOrProvinceName_default	= Some-State
+		+stateOrProvinceName_default	= 
+		 
+		 localityName			= Locality Name (eg, city)
+		 
+		 0.organizationName		= Organization Name (eg, company)
+		-0.organizationName_default	= Internet Widgits Pty Ltd
+		+0.organizationName_default	= B. & D. Kraus
+		 
+		 # we can do this but it is not needed normally :-)
+		 #1.organizationName		= Second Organization Name (eg, company)
+		@@ -327,7 +327,7 @@
+		 [ tsa_config1 ]
+		 
+		 # These are used by the TSA reply generation only.
+		-dir		= ./demoCA		# TSA root directory
+		+dir		= /var/ssl		# TSA root directory
+		 serial		= $dir/tsaserial	# The current serial number (mandatory)
+		 crypto_device	= builtin		# OpenSSL engine to use for signing
+		 signer_cert	= $dir/tsacert.pem 	# The TSA signing certificate
+	EOF
+	popd > /dev/null
+else
+	echo "Basic SSL configuration appears to be in place."
+fi
+
+
+# #####################
 # Postfix configuration
+# #####################
 
 # Enable system to send administrative emails
 if [[ $(dpkg -l bsd-mailx | grep "not installed") ]]; then
@@ -162,4 +227,4 @@ else
 fi
 
 
-# vim: fo+=qn
+# vim: fo+=ro
