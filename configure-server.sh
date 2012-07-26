@@ -4,28 +4,30 @@ normal=`tput sgr0`
 server=bdkraus.fritz.box
 remote_user=daniel
 
+shopt -s nocasematch
+
 yesno() {
 	# Prompts the user for a y/n choice
 	# $1 - prompt
 	# $2 - variable to store the answer into
 	# $3 - default answer
 	# Returns 0 if non-default answer, 1 if default answer.
-	if [ -n $3 -a -z `echo $2 | grep -i [yn]` ]; then
+	if [[ -n $3 && ! $2 =~ [yn] ]]; then
 		echo "### Fatal: yesno() received default answer '$2', which is neither yes nor no."
 		exit 99
 	fi
 	local choice="yn"
-	[[ $(echo $3 | grep -i y) ]] && local choice="Yn"
-	[[ $(echo $3 | grep -i n) ]] && local choice="yN"
+	[[ $3 =~ y ]] && local choice="Yn"
+	[[ $3 =~ n ]] && local choice="yN"
 	echo -n $1" [$choice] "
 	local answer=x
-	until [[ -z "$answer" || $(echo $answer | grep -i [yn]) ]]; do
+	until [[ -z $answer || $answer =~ [yn] ]]; do
 		read -s -n 1 answer
 	done
 	eval $2="$answer"
-	[ -z $answer ] && eval $2="$3"
+	[[ -z $answer ]] && eval $2="$3"
 	echo $answer
-	[[ $(echo $answer | grep -i $3) ]] && return 1
+	[[ $answer =~ $3 ]] && return 1
 	return 0
 }
 
@@ -34,11 +36,12 @@ heading() {
 }
 
 
+heading "This will configure the Ubuntu server. ***"
+
+
 # ########################################################################
 # Find out about the current environment
 # ########################################################################
-
-heading "This will configure the Ubuntu server. ***"
 
 # Use virt-what to determine if we are running in a virtual machine.
 if [ -z `which virt-what` ]; then
@@ -70,20 +73,22 @@ else # not running in a Virtual Box
 	if [ -z "$SSH_CLIENT" ]; then
 		heading "You appear to be on a remote desktop computer."
 		yesno "Copy the script to the server and log into the SSH?" answer y
-		if [[ $? ]]; then
+		if (( $? )); then
 			read -p "Please enter user name on server: " -e -i $remote_user remote_user
 			read -p "Please enter server name: " -e -i $server server
 			heading "Copying this script to the remote user's home directory..."
 			scp $0 $remote_user@$server:.
-			if [[ $? ]]; then
-				heading "Logging into server using SSH..."
-				ssh $remote_user@$server
+			if (( $? )); then
+					heading "Logging into server using SSH..."
+					ssh $remote_user@$server
 			else
 				echo "Failed to copy the file. Please check that the server is running "
-				echo "and the credentials are correct."$normal
+				echo "and the credentials are correct."
 			fi
-			exit
+		else
+			echo "Bye."
 		fi
+		exit
 	else
 		heading "Running in a secure shell on the server."
 	fi
@@ -99,7 +104,7 @@ fi
 
 # Prevent Grub from waiting indefinitely for user input on a headless server.
 
-if [ $(grep "set timeout=-1" /etc/grub.d/00_header) ]; then
+if [[ -n $(grep "set timeout=-1" /etc/grub.d/00_header) ]]; then
 	yesno "Patch Grub to not wait for user input when booting the system?" answer y
 	if (( $? )); then
 		heading "Patching Grub..."
@@ -154,9 +159,12 @@ else
 	heading "LDAP already installed."
 fi
 
-# #####################
+
+# ######################################################################
 # Postfix configuration
-# #####################
+# ----------------------------------------------------------------------
+# NB: This assumes that postfix was included in the system installation.
+# ######################################################################
 
 # Enable system to send administrative emails
 if [[ $(dpkg -s bsd-mailx 2>&1 | grep "not installed") ]]; then
@@ -164,6 +172,27 @@ if [[ $(dpkg -s bsd-mailx 2>&1 | grep "not installed") ]]; then
 	sudo apt-get -y install bsd-mailx
 else
 	heading "bsd-mailx package already installed."
+fi
+
+if [[ $(dpkg -s spamassassin 2>&1 | grep "not installed") ]]; then
+	heading "Installing spamassassin..."
+	sudo apt-get -y install spamassassin
+else
+	heading "spamassassin already installed."
+fi
+
+if [[ $(dpkg -s clamav 2>&1 | grep "not installed") ]]; then
+	heading "Installing clamav..."
+	sudo apt-get -y install clamav
+else
+	heading "clamav already installed."
+fi
+
+if [[ $(dpkg -s amavisd-new 2>&1 | grep "not installed") ]]; then
+	heading "Installing amavisd-new..."
+	sudo apt-get -y install amavisd-new
+else
+	heading "amavisd-new already installed."
 fi
 
 # Create alias for current user
@@ -176,6 +205,16 @@ if [[ ! $(grep "root: $(whoami)" /etc/aliases) ]]; then
 else
 	heading "Mail alias for root -> $(whoami) already configured."
 fi
+
+if [[ -z $(grep '# configure-server\.sh additions' /etc/postfix/main.cf) ]]; then
+	heading "Configuring Posfix..."
+	sudo tee -a /etc/postfix/main.cf /dev/null <<-'EOF'
+		# configure-server.sh additions
+		EOF
+else
+	heading "Postfix already configured."
+fi
+
 
 # ######################
 # PHPmyadmin
