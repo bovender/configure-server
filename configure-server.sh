@@ -283,6 +283,11 @@ else
 fi
 
 
+# TODO:
+# dovecot --> static userdb with allow_all_users
+# (but make sure postfix verifies existence of user!)
+# create proper maildir: /var/spool/vmail/{user}/Maildir with permissions
+
 # Lastly, restart Postfix and Dovecot
 if (( restart_postfix )); then sudo service postfix restart; fi
 if (( restart_dovecot )); then sudo service dovecot restart; fi
