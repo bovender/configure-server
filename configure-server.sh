@@ -1,17 +1,40 @@
 #!/bin/bash
+
+# #######################################################################
+# Configure-server.sh
+# Script to configure a Ubuntu server.
+# (c) Daniel Kraus (bovender) 2012
+# MIT license.
+#
+# !!! USE AT YOUR OWN RISK !!!
+# The author assumes no responsibility nor liability for loss of data,
+# disclose of private information including passwords, or any other 
+# harm that may be the result of running this script.
+# #######################################################################
+
+subdomain=bdkraus
+domain=fritz
+tld=box
+server_fqdn=$subdomain.$domain.$tld
+server_fqdn=${server_fqdn#.}
+user=daniel
+msgstr="*** "
 bold=`tput bold`
 normal=`tput sgr0`
-server=bdkraus.fritz.box
-remote_user=daniel
+restart_postfix=0
 
 shopt -s nocasematch
 
+# #######################################################################
+# Helper functions
+# #######################################################################
+
+# Prompts the user for a y/n choice
+# $1 - prompt
+# $2 - variable to store the answer into
+# $3 - default answer
+# Returns 0 if non-default answer, 1 if default answer.
 yesno() {
-	# Prompts the user for a y/n choice
-	# $1 - prompt
-	# $2 - variable to store the answer into
-	# $3 - default answer
-	# Returns 0 if non-default answer, 1 if default answer.
 	if [[ -n $3 && ! $2 =~ [yn] ]]; then
 		echo "### Fatal: yesno() received default answer '$2', which is neither yes nor no."
 		exit 99
@@ -31,13 +54,29 @@ yesno() {
 	return 0
 }
 
+# Prints out a heading
 heading() {
-	echo -e $bold"\n*** $1"$normal
+	echo -e $bold"\n$msgstr$1"$normal
+}
+
+# Prints out a message
+# (Currently this uses the heading() function, but may be adjusted
+# according to personal preference.)
+message() {
+	heading $1
 }
 
 
-heading "This will configure the Ubuntu server. ***"
+# #######################################################################
+# Begin script
+# #######################################################################
 
+if [[ $(whoami) == "root" ]]; then
+	echo "Please do not run this script as root. The script will sudo commands as necessary."
+	exit 1
+fi
+
+heading "This will configure the Ubuntu server. ***"
 
 # ########################################################################
 # Find out about the current environment
@@ -46,7 +85,7 @@ heading "This will configure the Ubuntu server. ***"
 # Use virt-what to determine if we are running in a virtual machine.
 if [ -z `which virt-what` ]; then
 	heading "Installing virt-what..."
-	sudo apt-get install -y virt-what
+	sudo apt-get install -qy virt-what
 fi
 
 heading "Requesting sudo password to find out about virtual environment..."
@@ -74,13 +113,14 @@ else # not running in a Virtual Box
 		heading "You appear to be on a remote desktop computer."
 		yesno "Copy the script to the server and log into the SSH?" answer y
 		if (( $? )); then
-			read -p "Please enter user name on server: " -e -i $remote_user remote_user
-			read -p "Please enter server name: " -e -i $server server
-			heading "Copying this script to the remote user's home directory..."
-			scp $0 $remote_user@$server:.
-			if (( $? )); then
+			read -p "Please enter user name on server: " -e -i $user user
+			read -p "Please enter server name: " -e -i $server_fqdn server
+			heading "Updating this script on the local workstation and the remote server..."
+			rsync -vuza $0 $user@$server_fqdn:.
+			rsync -vuza $user@$server_fqdn:$(basename $0) .
+			if (( $?==0 )); then
 					heading "Logging into server using SSH..."
-					ssh $remote_user@$server
+					exec ssh $user@$server_fqdn
 			else
 				echo "Failed to copy the file. Please check that the server is running "
 				echo "and the credentials are correct."
@@ -154,7 +194,7 @@ fi
 
 if [[ $(dpkg -s slapd 2>&1 | grep "not installed") ]]; then
 	heading "Installing LDAP..."
-	sudo apt-get -y install slapd lapd-utils
+	sudo apt-get -qy install slapd lapd-utils
 else
 	heading "LDAP already installed."
 fi
@@ -169,52 +209,83 @@ fi
 # Enable system to send administrative emails
 if [[ $(dpkg -s bsd-mailx 2>&1 | grep "not installed") ]]; then
 	heading "Installing bsd-mailx package..."
-	sudo apt-get -y install bsd-mailx
+	sudo apt-get -qy install bsd-mailx
 else
 	heading "bsd-mailx package already installed."
 fi
 
 if [[ $(dpkg -s spamassassin 2>&1 | grep "not installed") ]]; then
 	heading "Installing spamassassin..."
-	sudo apt-get -y install spamassassin
+	sudo apt-get -qy install spamassassin
 else
 	heading "spamassassin already installed."
 fi
 
+if [[ -z $(grep -i 'ENABLED=1' /etc/default/spamassassin) ]]; then
+	heading "Enabling spamassassin (including cron job for nightly updates)..."
+	sudo sed -i 's/^ENABLED=.$/ENABLED=1/' /etc/default/spamassassin
+	sudo sed -i 's/^CRON=.$/CRON=1/' /etc/default/spamassassin
+	echo "Starting spamassassin..."
+	sudo service spamassassin start
+fi
+
 if [[ $(dpkg -s clamav 2>&1 | grep "not installed") ]]; then
 	heading "Installing clamav..."
-	sudo apt-get -y install clamav
+	sudo apt-get -qy install clamav
 else
 	heading "clamav already installed."
 fi
 
 if [[ $(dpkg -s amavisd-new 2>&1 | grep "not installed") ]]; then
 	heading "Installing amavisd-new..."
-	sudo apt-get -y install amavisd-new
+	sudo apt-get -qy install amavisd-new
 else
 	heading "amavisd-new already installed."
 fi
 
 # Create alias for current user
-if [[ ! $(grep "root: $(whoami)" /etc/aliases) ]]; then
+if [[ -z $(grep "root:\s*`whoami`" /etc/aliases) ]]; then
 	yesno "Create root -> $(whoami) alias?" answer y
 	if (( $? )); then
 		heading "Creating alias..."
 		echo "root: $(whoami)" | sudo tee -a /etc/aliases
+		sudo newaliases
 	fi
 else
 	heading "Mail alias for root -> $(whoami) already configured."
 fi
 
-if [[ -z $(grep '# configure-server\.sh additions' /etc/postfix/main.cf) ]]; then
-	heading "Configuring Posfix..."
-	sudo tee -a /etc/postfix/main.cf /dev/null <<-'EOF'
-		# configure-server.sh additions
-		EOF
-else
-	heading "Postfix already configured."
+if [[ -z $(grep dovecot /etc/postfix/master.cf) ]]; then
+	heading "Configuring Postfix to use Dovecot as MDA..."
+	sudo tee -a /etc/postfix/master.cf <<'EOF'
+dovecot   unix  -       n       n       -       -       pipe
+  flags=DRhu user=vmail:vmail argv=/usr/lib/dovecot/deliver -f ${sender} -d ${recipient}
+EOF
+	if [[ -z $(grep dovecot /etc/postfix/main.cf) ]]; then
+		sudo postconf -e "dovecot_destination_recipient_limit = 1"
+		sudo postconf -e "virtual_mailbox_domains = $server_fqdn"
+		sudo postconf -e "virtual_transport = dovecot"
+		sudo postconf -e "mydestination ="
+		sudo sed -i 's/^mailbox_command/#&/' /etc/postfix/main.cf
+	fi
+	restart_postfix=1
 fi
 
+# Add the vmail user
+if [[ -z $(id vmail) ]]; then
+	heading "Adding vmail user..."
+	sudo groupadd -g 5000 vmail
+	sudo useradd -g vmail -u 5000 vmail -d /var/vmail
+	sudo mkdir /var/vmail
+	sudo chown vmail:vmail /var/vmail
+else
+	heading "User vmail already exists."
+fi
+
+
+# Lastly, restart Postfix and Dovecot
+if (( restart_postfix )); then sudo service postfix restart; fi
+if (( restart_dovecot )); then sudo service dovecot restart; fi
 
 # ######################
 # PHPmyadmin
@@ -222,7 +293,7 @@ fi
 
 if [[ $(dpkg -s phpmyadmin 2>&1 | grep "not installed" ) ]]; then
 	heading "Installing phpMyAdmin..."
-	sudo apt-get -y install phpmyadmin
+	sudo apt-get -qy install phpmyadmin
 	if [[ ! $(grep ForceSSL /etc/phpmyadmin/config.inc.php) ]]; then
 		echo "\$cfg['ForceSSL']=true;" | sudo tee -a /etc/phpmyadmin/config.inc.php
 	fi
@@ -238,7 +309,7 @@ fi
 
 if [[ $(dpkg -s php-pear 2>&1 | grep "not installed" ) ]]; then
 	heading "Installing PEAR..."
-	sudo apt-get -y install php-pear
+	sudo apt-get -qy install php-pear
 else
 	heading "PEAR already installed."
 fi
@@ -259,8 +330,8 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	sudo tee /etc/apache2/sites-available/horde > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
-	ServerAdmin webmaster@$server
-	ServerName horde.$server
+	ServerAdmin webmaster@$server_fqdn
+	ServerName horde.$server_fqdn
 	DocumentRoot /var/horde
 	<Directory />
 		Options FollowSymLinks
@@ -306,5 +377,18 @@ EOF
 else
 	heading "Horde subdomain for apache already configured."
 fi
+
+
+# #######################################################################
+# Finish up
+# #######################################################################
+
+mail -s "Message from configure-server.sh" root <<-EOF
+	Hello,
+
+	this is just to inform you that the configure-server script was run.
+
+	Script: $0
+	EOF
 
 # vim: fo+=ro
