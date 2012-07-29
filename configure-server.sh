@@ -17,13 +17,28 @@ subdomain=bdkraus
 domain=fritz
 tld=box
 server_fqdn=$subdomain.$domain.$tld
-server_fqdn=${server_fqdn#.}
+server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
 user=daniel
+# simple password for demonstration purposes (will be used in LDAP)
+pw=pass 
 vmailuser=vmail
 vmailhome=/var/$vmailuser
-postfix_main=/etc/postfix/main.cf
-postfix_master=/etc/postfix/master.cf
-dovecot_confd=/etc/dovecot/conf.d
+
+# Postfix configuration directories
+postfix_base=/etc/postfix
+postfix_main=$postfix_base/main.cf
+postfix_master=$postfix_base/master.cf
+postfix_ldap=$postfix_base/ldap
+
+# Dovecot configuration directories
+dovecot_base=/etc/dovecot
+dovecot_confd=$dovecot_base/conf.d
+dovecot_ldap=$dovecot_base/ldap
+
+# LDAP DNs
+ldapbaseDN="dc=$domain,dc=$tld"
+ldapusersDN="ou=users,$ldapbaseDN"
+ldapauthDN="ou=auth,$ldapbaseDN"
 
 # Internal ('work') variables
 msgstr="*** "
@@ -119,16 +134,20 @@ else # not running in a Virtual Box
 	# (assuming 
 	if [ -z "$SSH_CLIENT" ]; then
 		heading "You appear to be on a remote desktop computer."
-		yesno "Copy the script to the server and log into the SSH?" answer y
+		echo "Configured remote: $bold$user@$server_fqdn$normal"
+		yesno "Synchronize the script with the one on the server?" answer y
 		if (( $? )); then
-			read -p "Please enter user name on server: " -e -i $user user
-			read -p "Please enter server name: " -e -i $server_fqdn server
-			heading "Updating this script on the local workstation and the remote server..."
+			message "Updating..."
 			rsync -vuza $0 $user@$server_fqdn:.
 			rsync -vuza $user@$server_fqdn:$(basename $0) .
 			if (( $?==0 )); then
-					heading "Logging into server using SSH..."
+				yesno "Log into secure shell?" answer y
+				if (( $? )); then
+					heading "Logging into server's secure shell..."
 					exec ssh $user@$server_fqdn
+				else
+					message "Bye."
+				fi
 			else
 				echo "Failed to copy the file. Please check that the server is running "
 				echo "and the credentials are correct."
@@ -141,6 +160,17 @@ else # not running in a Virtual Box
 		heading "Running in a secure shell on the server."
 	fi
 fi
+
+# From here on, we can be pretty sure to be on the server.
+# Let's check for pwgen (needed to generate passwords)
+if [[ -z $(which pwgen) ]]; then
+	heading "Installing pwgen..."
+	sudo apt-get -qy install pwgen
+fi
+
+# Internal passwords for LDAP access
+postfix_ldap_pw=$(pwgen -cns 32 1)
+dovecot_ldap_pw=$(pwgen -cns 32 1)
 
 
 # #####################################################################
@@ -200,9 +230,6 @@ fi
 # LDAP configuration
 # ##################
 
-# DIT:
-# http://www.asciiflow.com/#6112247197461489368/1725253880
-
 if [[ $(dpkg -s slapd 2>&1 | grep "not installed") ]]; then
 	heading "Installing LDAP..."
 	sudo apt-get -qy install slapd lapd-utils
@@ -210,6 +237,56 @@ else
 	heading "LDAP already installed."
 fi
 
+# DIT:
+# http://www.asciiflow.com/#6112247197461489368/1725253880
+#                                     +----------------+
+#                                     |dc=domain,dc=tld|
+#                                     +----------------+
+#                        +-----------+                   +-----------+
+#                        |  ou=auth  |                   |  ou=users |
+#                        +-----------+                   +-----------+
+
+# Add the first user account to the LDAP DIT.
+# Note that the here-doc uses the "-" modifier, which means that all leading
+# space is automatically removed from each line. If you want to use line
+# continuations, the "-" modifier must be removed, and the entire here-doc
+# must be shifted to the left.
+echo "Will now add an entry for user $user to the LDAP tree."
+echo "ldapadd will prompt you for the LDAP admin password (i.e., the"
+echo "password that you gave during system installation."
+ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
+	dn: $ldapusersDN
+	ou: ${ldapusersDN%%,*}
+	objectClass: organizationalUnit
+
+	dn: uid=$user,$ldapusersDN
+	objectClass: inetOrgPerson
+	# objectClass: CourierMailAlias
+	# objectClass: CourierMailAccount
+	uid: $user
+	userPassword: $pw
+	mail: $user@$server_fqdn
+	maildrop: root@$server_fqdn
+	maildrop: postmaster@$server_fqdn
+	EOF
+
+# Ubuntu pre-configures the OpenLDAP online configuration such
+# that it is accessible as the system root, therefore we sudo
+# the following command.
+sudo ldapadd -Y EXTERNAL -H ldapi:/// <<-EOF
+	# Configure ACLs for the hdb backend database:
+	# First, remove the existing ACLs:
+	dn: olcDatabase={1}hdb,cn=config
+	changetype: modify
+	delete: olcAccess
+	olcAccess: {0}
+
+	# Then, add our own ACLs:
+	dn: olcDatabase={1}hdb,cn=config
+	changetype: modify
+	add: olcAccess
+	olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn=dovecot,$ldapauthDN" read by anonymous auth by self write by * none
+	EOF
 
 # ######################################################################
 # Postfix configuration
@@ -217,13 +294,18 @@ fi
 # NB: This assumes that postfix was included in the system installation.
 # ######################################################################
 
+
 # Enable system to send administrative emails
+
 if [[ $(dpkg -s bsd-mailx 2>&1 | grep "not installed") ]]; then
 	heading "Installing bsd-mailx package..."
 	sudo apt-get -qy install bsd-mailx
 else
 	heading "bsd-mailx package already installed."
 fi
+
+
+# Install spamassassin, clamav, and amavisd-new
 
 if [[ $(dpkg -s spamassassin 2>&1 | grep "not installed") ]]; then
 	heading "Installing spamassassin..."
@@ -254,6 +336,15 @@ else
 	heading "amavisd-new already installed."
 fi
 
+
+# Configure Postfix to use LDAP maps
+if [[ ! -d $postfix_ldap ]]; then
+	heading "Configuring Postfix to use LDAP maps..."
+	# sudo mkdir $postfix_ldap
+	# TODO: adjust permissions so that only postfix can read this
+
+fi
+
 # Create alias for current user
 # TODO: remove this? when ldap is configured
 if [[ -z $(grep "root:\s*`whoami`" /etc/aliases) ]]; then
@@ -275,29 +366,61 @@ dovecot   unix  -       n       n       -       -       pipe
 EOF
 	if [[ -z $(grep dovecot /etc/postfix/main.cf) ]]; then
 		sudo postconf -e "dovecot_destination_recipient_limit = 1"
-		sudo postconf -e "virtual_mailbox_domains = $server_fqdn"
-		sudo postconf -e "virtual_transport = dovecot"
-		sudo postconf -e "mydestination ="
+		sudo postconf -e "local_transport = dovecot"
 		sudo sed -i 's/^mailbox_command/#&/' /etc/postfix/main.cf
 	fi
 	restart_postfix=1
 fi
 
+
+# #######################################################################
+# Dovecot configuration
+# #######################################################################
+
 if [[ ! -a $dovecot_confd/99-custom.conf ]]; then
 	heading "Adding Dovecot custom configuration..."
 	sudo tee $dovecot_confd/99-custom.conf > /dev/null <<EOF
-# Configure static userdb for Dovecot.
 # As Postfix will make sure that the destination user exists, we can
 # tell Dovecot to allow_all_users.
+
+auth-default {
+	mechanisms: plain login digest-md5 cram-md5
+}
+passdb {
+	driver: ldap
+	args: $dovecot_ldap/dovecot-ldap.conf
+}
 userdb {
-	driver = static
-	args = uid=$vmail gid=$vmail home=$vmailhome/%u allow_all_users=yes
+	driver: ldap
+	args: $dovecot_ldap/dovecot-ldap.conf
 }
 EOF
 	sudo chmod 644 $dovecot_confd/99-custom.conf
 else
 	heading "Dovecot custom configuration already present."
 fi
+
+# # TODO: make this use sasl
+# if [[ ! -a $dovecot_ldap/dovecot-ldap.conf ]]; then
+# 	sudo mkdir $dovecot_ldap
+# 	sudo chown vmail:vmail $dovecot_ldap
+# 	tee $dovecot_ldap/dovecot-ldap.conf <<-EOF
+# 		uris = ldap://localhost
+# 		dn = dovecot
+# 		dnpass = dovecot_pass
+# 		sasl_bind = no
+# 		sasl_mech = DIGEST-MD5
+# 		ldap_version = 3
+# 		base = o=Abimus
+# 		deref = never
+# 		scope = subtree
+# 		user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
+# 		user_filter = (&(objectClass=posixAccount)(uid=%u))
+# 		pass_attrs = uid=user,userPassword=password
+# 		pass_filter = (&(objectClass=posixAccount)(uid=%u))
+# 		default_pass_scheme = CLEARTEXT
+# 		EOF
+# fi
 
 # Add the vmail user.
 # No need to make individual user's directories as Dovecot will
