@@ -1,0 +1,78 @@
+# Converted from authldap.schema to cn=config format by D. Kraus, 29-Jul-12
+# Original file extracted from:
+# http://de.archive.ubuntu.com/ubuntu/pool/universe/c/courier-authlib/courier-authlib-ldap_0.63.0-4build1_amd64.deb
+# Depends on: nis.schema, which depends on cosine.schema
+dn: cn=authldap,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: authldap
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.1 NAME 'mailbox'
+ DESC 'The absolute path to the mailbox for a mail account in a non-default location'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.2 NAME 'quota'
+ DESC 'A string that represents the quota on a mailbox'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.3 NAME 'clearPassword'
+ DESC 'A separate text that stores the mail account password in clear text'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{128} )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.4 NAME 'maildrop'
+ DESC 'RFC822 Mailbox - mail alias'
+ EQUALITY caseIgnoreIA5Match
+ SUBSTR caseIgnoreIA5SubstringsMatch
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.5 NAME 'mailsource'
+ DESC 'Message source'
+ EQUALITY caseIgnoreIA5Match
+ SUBSTR caseIgnoreIA5SubstringsMatch
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.6 NAME 'virtualdomain'
+ DESC 'A mail domain that is mapped to a single mail account'
+ EQUALITY caseIgnoreIA5Match
+ SUBSTR caseIgnoreIA5SubstringsMatch
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.7 NAME 'virtualdomainuser'
+ DESC 'Mailbox that receives mail for a mail domain'
+ EQUALITY caseIgnoreIA5Match
+ SUBSTR caseIgnoreIA5SubstringsMatch
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.8 NAME 'defaultdelivery'
+ DESC 'Default mail delivery instructions'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.9 NAME 'disableimap'
+ DESC 'Set this attribute to 1 to disable IMAP access'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.10 NAME 'disablepop3'
+ DESC 'Set this attribute to 1 to disable POP3 access'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.11 NAME 'disablewebmail'
+ DESC 'Set this attribute to 1 to disable IMAP access'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.12 NAME 'sharedgroup'
+ DESC 'Virtual shared group'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.13 NAME 'disableshared'
+ DESC 'Set this attribute to 1 to disable shared mailbox usage'
+ EQUALITY caseExactIA5Match
+ SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.1 NAME 'CourierMailAccount'
+ DESC 'Mail account object as used by the Courier mail server'
+ SUP top AUXILIARY
+ MUST ( mail $ homeDirectory )
+ MAY ( uidNumber $ gidNumber $ mailbox $ uid $ cn $ gecos $ description $ loginShell $ quota $ userPassword $ clearPassword $ defaultdelivery $ disableimap $ disablepop3 $ disablewebmail $ sharedgroup $ disableshared $ mailhost ) )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias'
+ DESC 'Mail aliasing/forwarding entry'
+ SUP top AUXILIARY
+ MUST ( mail $ maildrop )
+ MAY ( mailsource $ description ) )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias'
+ DESC 'Domain mail aliasing/forwarding entry'
+ SUP top AUXILIARY
+ MUST ( virtualdomain $ virtualdomainuser )
+ MAY ( mailsource $ description ) )
