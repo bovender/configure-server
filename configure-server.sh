@@ -12,12 +12,20 @@
 # harm that may be the result of running this script.
 # #######################################################################
 
+# Configuration variables
 subdomain=bdkraus
 domain=fritz
 tld=box
 server_fqdn=$subdomain.$domain.$tld
 server_fqdn=${server_fqdn#.}
 user=daniel
+vmailuser=vmail
+vmailhome=/var/$vmailuser
+postfix_main=/etc/postfix/main.cf
+postfix_master=/etc/postfix/master.cf
+dovecot_confd=/etc/dovecot/conf.d
+
+# Internal ('work') variables
 msgstr="*** "
 bold=`tput bold`
 normal=`tput sgr0`
@@ -192,6 +200,9 @@ fi
 # LDAP configuration
 # ##################
 
+# DIT:
+# http://www.asciiflow.com/#6112247197461489368/1725253880
+
 if [[ $(dpkg -s slapd 2>&1 | grep "not installed") ]]; then
 	heading "Installing LDAP..."
 	sudo apt-get -qy install slapd lapd-utils
@@ -244,6 +255,7 @@ else
 fi
 
 # Create alias for current user
+# TODO: remove this? when ldap is configured
 if [[ -z $(grep "root:\s*`whoami`" /etc/aliases) ]]; then
 	yesno "Create root -> $(whoami) alias?" answer y
 	if (( $? )); then
@@ -259,7 +271,7 @@ if [[ -z $(grep dovecot /etc/postfix/master.cf) ]]; then
 	heading "Configuring Postfix to use Dovecot as MDA..."
 	sudo tee -a /etc/postfix/master.cf <<'EOF'
 dovecot   unix  -       n       n       -       -       pipe
-  flags=DRhu user=vmail:vmail argv=/usr/lib/dovecot/deliver -f ${sender} -d ${recipient}
+  flags=DRhu user=$vmail:$vmail argv=/usr/lib/dovecot/deliver -f ${sender} -d ${recipient}
 EOF
 	if [[ -z $(grep dovecot /etc/postfix/main.cf) ]]; then
 		sudo postconf -e "dovecot_destination_recipient_limit = 1"
@@ -271,13 +283,29 @@ EOF
 	restart_postfix=1
 fi
 
-# Add the vmail user
-if [[ -z $(id vmail) ]]; then
+if [[ ! -a $dovecot_confd/99-custom.conf ]]; then
+	heading "Adding Dovecot custom configuration..."
+	sudo tee $dovecot_confd/99-custom.conf > /dev/null <<EOF
+# Configure static userdb for Dovecot.
+# As Postfix will make sure that the destination user exists, we can
+# tell Dovecot to allow_all_users.
+userdb {
+	driver = static
+	args = uid=$vmail gid=$vmail home=$vmailhome/%u allow_all_users=yes
+}
+EOF
+	sudo chmod 644 $dovecot_confd/99-custom.conf
+else
+	heading "Dovecot custom configuration already present."
+fi
+
+# Add the vmail user.
+# No need to make individual user's directories as Dovecot will
+# take care of this.
+if [[ -z $(id $vmail) ]]; then
 	heading "Adding vmail user..."
-	sudo groupadd -g 5000 vmail
-	sudo useradd -g vmail -u 5000 vmail -d /var/vmail
-	sudo mkdir /var/vmail
-	sudo chown vmail:vmail /var/vmail
+	sudo adduser --system --home $vmailhome --uid 5000 --group $vmail
+	sudo chown $vmail:$vmail $vmailhome
 else
 	heading "User vmail already exists."
 fi
