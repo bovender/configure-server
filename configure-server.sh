@@ -86,7 +86,7 @@ heading() {
 # (Currently this uses the heading() function, but may be adjusted
 # according to personal preference.)
 message() {
-	heading $1
+	heading "$1"
 }
 
 
@@ -246,12 +246,56 @@ fi
 #                        |  ou=auth  |                   |  ou=users |
 #                        +-----------+                   +-----------+
 
-# Add the first user account to the LDAP DIT.
-# Note that the here-doc uses the "-" modifier, which means that all leading
-# space is automatically removed from each line. If you want to use line
-# continuations, the "-" modifier must be removed, and the entire here-doc
-# must be shifted to the left.
-echo "Will now add an entry for user $user to the LDAP tree."
+# Add the schema, ACLs and first user account to LDAP.
+# Be aware that LDAP is picky about leading space!
+
+message "Adding schema and access control lists (ACLs) to LDAP's cn=config..."
+# Ubuntu pre-configures the OpenLDAP online configuration such
+# that it is accessible as the system root, therefore we sudo
+# the following command.
+sudo ldapadd -Y EXTERNAL -H ldapi:/// <<EOF
+# Configure ACLs for the hdb backend database:
+# First, remove the existing ACLs:
+dn: olcDatabase={1}hdb,cn=config
+changetype: modify
+delete: olcAccess
+olcAccess: {0}
+
+# Then, add our own ACLs:
+dn: olcDatabase={1}hdb,cn=config
+changetype: modify
+add: olcAccess
+olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn=dovecot,$ldapauthDN" read by anonymous auth by self write by * none
+
+# Add courier-authlib-ldap schema:
+# Converted from authldap.schema to cn=config format by D. Kraus, 29-Jul-12
+# Original file extracted from:
+# http://de.archive.ubuntu.com/ubuntu/pool/universe/c/courier-authlib/courier-authlib-ldap_0.63.0-4build1_amd64.deb
+# Line breaks were removed on purpose, as strange errors occurred on import.
+# Depends on: nis.schema, which depends on cosine.schema
+
+dn: cn=authldap,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: authldap
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.1 NAME 'mailbox' DESC 'The absolute path to the mailbox for a mail account in a non-default location' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.2 NAME 'quota' DESC 'A string that represents the quota on a mailbox' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.3 NAME 'clearPassword' DESC 'A separate text that stores the mail account password in clear text' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{128} )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.4 NAME 'maildrop' DESC 'RFC822 Mailbox - mail alias' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.5 NAME 'mailsource' DESC 'Message source' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.6 NAME 'virtualdomain' DESC 'A mail domain that is mapped to a single mail account' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.7 NAME 'virtualdomainuser' DESC 'Mailbox that receives mail for a mail domain' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.8 NAME 'defaultdelivery' DESC 'Default mail delivery instructions' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.9 NAME 'disableimap' DESC 'Set this attribute to 1 to disable IMAP access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.10 NAME 'disablepop3' DESC 'Set this attribute to 1 to disable POP3 access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.11 NAME 'disablewebmail' DESC 'Set this attribute to 1 to disable IMAP access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.12 NAME 'sharedgroup' DESC 'Virtual shared group' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.13 NAME 'disableshared' DESC 'Set this attribute to 1 to disable shared mailbox usage' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.1 NAME 'CourierMailAccount' DESC 'Mail account object as used by the Courier mail server' SUP top AUXILIARY MUST ( mail $ homeDirectory ) MAY ( uidNumber $ gidNumber $ mailbox $ uid $ cn $ gecos $ description $ loginShell $ quota $ userPassword $ clearPassword $ defaultdelivery $ disableimap $ disablepop3 $ disablewebmail $ sharedgroup $ disableshared $ mailhost ) )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias' DESC 'Mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( mail $ maildrop ) MAY ( mailsource $ description ) )
+olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias' DESC 'Domain mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( virtualdomain $ virtualdomainuser ) MAY ( mailsource $ description ) )
+EOF
+
+message "Will now add an entry for user $user to the LDAP tree."
 echo "ldapadd will prompt you for the LDAP admin password (i.e., the"
 echo "password that you gave during system installation."
 ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
@@ -270,23 +314,6 @@ ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
 	maildrop: postmaster@$server_fqdn
 	EOF
 
-# Ubuntu pre-configures the OpenLDAP online configuration such
-# that it is accessible as the system root, therefore we sudo
-# the following command.
-sudo ldapadd -Y EXTERNAL -H ldapi:/// <<-EOF
-	# Configure ACLs for the hdb backend database:
-	# First, remove the existing ACLs:
-	dn: olcDatabase={1}hdb,cn=config
-	changetype: modify
-	delete: olcAccess
-	olcAccess: {0}
-
-	# Then, add our own ACLs:
-	dn: olcDatabase={1}hdb,cn=config
-	changetype: modify
-	add: olcAccess
-	olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn=dovecot,$ldapauthDN" read by anonymous auth by self write by * none
-	EOF
 
 # ######################################################################
 # Postfix configuration
