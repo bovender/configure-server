@@ -216,7 +216,7 @@ if [[ ! $(sudo grep "^$(whoami)" /etc/sudoers) ]]; then
 		# To be on the safe side, we patch a copy of /etc/sudoers and only
 		# make the system use it if it passes the visudo test.
 		sudo sed 's/^\(%admin\|root\|%sudo\)/#&/'  /etc/sudoers > configure-sudoers.tmp
-		echo "$user	ALL=(ALL:ALL) ALL " | sudo tee -a configure-sudoers.tmp > /dev/null
+		echo 'daniel	ALL=(ALL:ALL) ALL ' | sudo tee -a configure-sudoers.tmp > /dev/null
 
 		# Visudo returns 0 if everything is correct; 1 if errors are found
 		sudo visudo -c -f configure-sudoers.tmp
@@ -297,31 +297,56 @@ olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias' DESC 'Mail a
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias' DESC 'Domain mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( virtualdomain $ virtualdomainuser ) MAY ( mailsource $ description ) )
 EOF
 
-message "Will now add an entry for user $user to the LDAP tree."
-echo "ldapadd will prompt you for the LDAP admin password (i.e., the"
-echo "password that you gave during system installation."
-echo "<<${full_user_name##* }>>"
-ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
-	dn: $ldapusersDN
-	ou: ${ldapusersDN%%,*}
-	objectClass: organizationalUnit
+heading "Binding to LDAP directory..."
+echo "For binding to the LDAP directory, please enter the password that you used"
+echo "during installation of this server."
+code=-1
+until (( $code==0 )); do
+	read -sp "LDAP password for cn=admin,$ldapbaseDN: " ldap_admin_pw
+	if [[ $ldap_admin_pw ]]; then
+		ldapsearch -LLL -w "$ldap_admin_pw" -D "cn=admin,$ldapbaseDN" \
+			-b "$ldapbaseDN" "$ldapbaseDN" dc /dev/null
+		code=$?
+		if (( $code==49 )); then
+			echo "Incorrect password. Please enter password again. Empty password will abort."
+		fi
+	else
+		message "Empty password -- aborting. Bye."
+		exit 1
+	fi
+done
+if (( $code!=0 )); then
+	message "LDAP server returned error code $code -- aborting. Bye."
+	exit 2
+fi
 
-	dn: uid=$user,$ldapusersDN
-	objectClass: inetOrgPerson
-	objectClass: CourierMailAlias
-	objectClass: CourierMailAccount
-	uid: $user
-	sn: $(echo $full_user_name | sed 's/^.* //')
-	cn: $full_user_name
-	userPassword: $pw
-	mail: $user@$server_fqdn
-	maildrop: root@$server_fqdn
-	maildrop: postmaster@$server_fqdn
-	# The homeDirectory attribute is required by the schema, but we leave
-	# it empty since we are going to use $vmailhome as the uniform base
-	# for all accounts.
-	homeDirectory: 
-	EOF
+if [[ -z $(ldapsearch -LLL -w "$ldap_admin_pw" -D "cn=admin,$ldapbaseDN" -b "$ldapusersDN" "uid=$user" uid) ]]
+then
+	message "Adding an entry for user $user to the LDAP tree..."
+	ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
+		dn: $ldapusersDN
+		ou: ${ldapusersDN%%,*}
+		objectClass: organizationalUnit
+
+		dn: uid=$user,$ldapusersDN
+		objectClass: inetOrgPerson
+		objectClass: CourierMailAlias
+		objectClass: CourierMailAccount
+		uid: $user
+		sn: $(echo $full_user_name | sed 's/^.* //')
+		cn: $full_user_name
+		userPassword: $pw
+		mail: $user@$server_fqdn
+		maildrop: root@$server_fqdn
+		maildrop: postmaster@$server_fqdn
+		# The homeDirectory attribute is required by the schema, but we leave
+		# it empty since we are going to use $vmailhome as the uniform base
+		# for all accounts.
+		homeDirectory: 
+		EOF
+else
+	message "User $user already has an LDAP entry under $ldapusersDN."
+fi
 
 
 # ######################################################################
