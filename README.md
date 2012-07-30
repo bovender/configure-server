@@ -9,8 +9,8 @@ configuration steps needed for a (more or less) complete server setup,
 I decided to put everything into a Bash script that I can execute on 
 the remote server.
 
-__<style="font-color:red">This script is under active
-development and not yet ready for 'real' use.</style>__
+__This script is under active development and not yet ready for 'real'
+use.__
 
 __DISCLAIMER: USE THIS SCRIPT AT YOUR OWN RISK! I ASSUME NO
 RESPONSIBILITY OR LIABILITY FOR ANY LOSS OF DATA, COMPROMISE OF
@@ -31,8 +31,8 @@ though I have not tested this (yet).
 The only prerogative for this script is that you have installed Ubuntu
 Server with the following options:
 
-	- LAMP
-	- Postfix
+- LAMP
+- Postfix
 
 The script does not support name server (DNS) configuration.
 
@@ -42,14 +42,14 @@ Features
 
 The script configures the following services:
 
-	- Certificate-based SSH login
-	- [Postfix](http://postfix.org) mail server with user management in LDAP directory and
-	  SMTP-AUTH and TLS/STARTTLS support
-	- [Dovecot](http://dovecot.org) IMAP/POP3 server with user management in LDAP directory
-	  and TLS/STARTTLS support
-	- [OpenLDAP](http://openldap.org) server for central user management and single sign-on
-	- [Horde](http://horde.org) groupware
-	- [OwnCloud](http://owncloud.org) cloud server
+- Certificate-based SSH login
+- [Postfix](http://postfix.org) mail server with user management in LDAP directory and
+  SMTP-AUTH and TLS/STARTTLS support
+- [Dovecot](http://dovecot.org) IMAP/POP3 server with user management in LDAP directory
+  and TLS/STARTTLS support
+- [OpenLDAP](http://openldap.org) server for central user management and single sign-on
+- [Horde](http://horde.org) groupware
+- [OwnCloud](http://owncloud.org) cloud server
 
 
 Customizing the script
@@ -60,10 +60,10 @@ configuration variables right at the top. Most importantly, if you
 want to use the script on your own server, you __must__ change at 
 least the following variables:
 
-	- $domain
-	- $tld
-	- $user
-	- $full_user_name
+- $domain
+- $tld
+- $user
+- $full\_user\_name
 
 
 Running the script
@@ -71,9 +71,7 @@ Running the script
 
 When you have customized the script, you can run it locally:
 
-'''bash
-./configure-server.sh
-'''
+	./configure-server.sh
 
 The script will detect that it is not being executed on a server and
 will offer to upload itself to the server that you indicated (using
@@ -103,12 +101,12 @@ To 'play' with a Ubuntu Server, you can quickly set up a
 	  Server (from a previously [downloaded ISO
 	  file](http://www.ubuntu.com/download/server)), sudo-edit the
 	  file <tt>/etc/network/interfaces</tt>:
-	  '''
+	  ```
 	  auto eth0
 	  iface eth0 inet static
 	  	address 192.168.56.__101__
 		netmask 255.255.255.0
-	  '''
+	  ```
 	- Note that this configuration does not give the virtual server
 	  access to the internet! If you want to do this, configure an
 	  additional network interface for the virtual machine as 'NAT'
