@@ -19,6 +19,7 @@ tld=box
 server_fqdn=$subdomain.$domain.$tld
 server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
 user=daniel
+full_user_name="Daniel Kraus"
 # simple password for demonstration purposes (will be used in LDAP)
 pw=pass 
 vmailuser=vmail
@@ -290,6 +291,7 @@ olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.10 NAME 'disablepop3' DESC 'Set this 
 olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.11 NAME 'disablewebmail' DESC 'Set this attribute to 1 to disable IMAP access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
 olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.12 NAME 'sharedgroup' DESC 'Virtual shared group' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
 olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.13 NAME 'disableshared' DESC 'Set this attribute to 1 to disable shared mailbox usage' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.14 NAME 'mailhost' DESC 'Host to which incoming POP/IMAP connections should be proxied' EQUALITY caseIgnoreIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.1 NAME 'CourierMailAccount' DESC 'Mail account object as used by the Courier mail server' SUP top AUXILIARY MUST ( mail $ homeDirectory ) MAY ( uidNumber $ gidNumber $ mailbox $ uid $ cn $ gecos $ description $ loginShell $ quota $ userPassword $ clearPassword $ defaultdelivery $ disableimap $ disablepop3 $ disablewebmail $ sharedgroup $ disableshared $ mailhost ) )
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias' DESC 'Mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( mail $ maildrop ) MAY ( mailsource $ description ) )
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias' DESC 'Domain mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( virtualdomain $ virtualdomainuser ) MAY ( mailsource $ description ) )
@@ -298,6 +300,7 @@ EOF
 message "Will now add an entry for user $user to the LDAP tree."
 echo "ldapadd will prompt you for the LDAP admin password (i.e., the"
 echo "password that you gave during system installation."
+echo "<<${full_user_name##* }>>"
 ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
 	dn: $ldapusersDN
 	ou: ${ldapusersDN%%,*}
@@ -305,13 +308,19 @@ ldapadd -c -x -W -D "cn=admin,$ldapbaseDN" <<-EOF
 
 	dn: uid=$user,$ldapusersDN
 	objectClass: inetOrgPerson
-	# objectClass: CourierMailAlias
-	# objectClass: CourierMailAccount
+	objectClass: CourierMailAlias
+	objectClass: CourierMailAccount
 	uid: $user
+	sn: $(echo $full_user_name | sed 's/^.* //')
+	cn: $full_user_name
 	userPassword: $pw
 	mail: $user@$server_fqdn
 	maildrop: root@$server_fqdn
 	maildrop: postmaster@$server_fqdn
+	# The homeDirectory attribute is required by the schema, but we leave
+	# it empty since we are going to use $vmailhome as the uniform base
+	# for all accounts.
+	homeDirectory: 
 	EOF
 
 
