@@ -60,10 +60,10 @@ configuration variables right at the top. Most importantly, if you
 want to use the script on your own server, you __must__ change at 
 least the following variables:
 
-- $domain
-- $tld
-- $user
-- $full\_user\_name
+- <tt>$domain</tt>
+- <tt>$tld</tt>
+- <tt>$user</tt>
+- <tt>$full\_user\_name</tt>
 
 
 Running the script
@@ -87,31 +87,31 @@ Setting up a Ubuntu Server VM
 To 'play' with a Ubuntu Server, you can quickly set up a
 [VirtualBox](http://www.virtualbox.org) machine.
 
-	- Network configuration: I recommend 'host only' network to keep
-	  the server in a sandbox. Selecting 'host only' will create an
-	  additional network interface (e.g., <tt>vboxnet0</tt>) on the
-	  host. _Before starting the virtual machine_, make sure to	disable
-	  the DHCP server (<tt>File</tt> &rarr; <tt>Preferences</tt>
-	  &rarr; <tt>Network</tt> &rarr; <tt>Edit (space)</tt>).
-	- To tell the host about the server, sudo-edit <tt>/etc/hosts</tt>
-	  _on the host system_. For example, if you gave your server the
-	  fully qualified domain name "test.local", insert a line
-	  <tt>192.168.56.__101__ test.local</tt>.
-	- After starting up the virtual machine and installing the Ubuntu
-	  Server (from a previously [downloaded ISO
-	  file](http://www.ubuntu.com/download/server)), sudo-edit the
-	  file <tt>/etc/network/interfaces</tt>:
-	  ```
-	  auto eth0
-	  iface eth0 inet static
-	  	address 192.168.56.__101__
-		netmask 255.255.255.0
-	  ```
-	- Note that this configuration does not give the virtual server
-	  access to the internet! If you want to do this, configure an
-	  additional network interface for the virtual machine as 'NAT'
-	  (from the VirtualBox GUI). Then, add <tt>auto eth1</tt> and
-	  <tt>iface eth1 inet dhcp</tt> to the interfaces file.
+- Network configuration: I recommend 'host only' network to keep
+  the server in a sandbox. Selecting 'host only' will create an
+  additional network interface (e.g., <tt>vboxnet0</tt>) on the
+  host. _Before starting the virtual machine_, make sure to	disable
+  the DHCP server (<tt>File</tt> &rarr; <tt>Preferences</tt>
+  &rarr; <tt>Network</tt> &rarr; <tt>Edit (space)</tt>).
+- To tell the host about the server, sudo-edit <tt>/etc/hosts</tt>
+  _on the host system_. For example, if you gave your server the
+  fully qualified domain name "test.local", insert a line
+  <tt>192.168.56.__101__ test.local</tt>.
+- After starting up the virtual machine and installing the Ubuntu
+  Server (from a previously [downloaded ISO
+  file](http://www.ubuntu.com/download/server)), sudo-edit the
+  file <tt>/etc/network/interfaces</tt>:
+  ```
+  auto eth0
+  iface eth0 inet static
+	address 192.168.56.__101__
+	netmask 255.255.255.0
+  ```
+- Note that this configuration does not give the virtual server
+  access to the internet! If you want to do this, configure an
+  additional network interface for the virtual machine as 'NAT'
+  (from the VirtualBox GUI). Then, add <tt>auto eth1</tt> and
+  <tt>iface eth1 inet dhcp</tt> to the interfaces file.
 
 
 License
