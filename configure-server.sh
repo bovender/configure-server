@@ -216,7 +216,7 @@ if [[ ! $(sudo grep "^$(whoami)" /etc/sudoers) ]]; then
 		# To be on the safe side, we patch a copy of /etc/sudoers and only
 		# make the system use it if it passes the visudo test.
 		sudo sed 's/^\(%admin\|root\|%sudo\)/#&/'  /etc/sudoers > configure-sudoers.tmp
-		echo 'daniel	ALL=(ALL:ALL) ALL ' | sudo tee -a configure-sudoers.tmp > /dev/null
+		echo "$user	ALL=(ALL:ALL) ALL " | sudo tee -a configure-sudoers.tmp > /dev/null
 
 		# Visudo returns 0 if everything is correct; 1 if errors are found
 		sudo visudo -c -f configure-sudoers.tmp
