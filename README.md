@@ -80,6 +80,16 @@ into the secure shell on the server, where you can simple issue the
 same command again. In a few moments, you should have a fully
 functional server!
 
+If you happen to modify the script on the server, but run it again
+locally, the script will fetch the updated script from the server
+before logging you in.
+
+
+Configuration notes
+-------------------
+
+TODO
+
 
 Setting up a Ubuntu Server VM
 -----------------------------
@@ -87,31 +97,59 @@ Setting up a Ubuntu Server VM
 To 'play' with a Ubuntu Server, you can quickly set up a
 [VirtualBox](http://www.virtualbox.org) machine.
 
-- Network configuration: I recommend 'host only' network to keep
-  the server in a sandbox. Selecting 'host only' will create an
-  additional network interface (e.g., <tt>vboxnet0</tt>) on the
-  host. _Before starting the virtual machine_, make sure to	disable
-  the DHCP server (<tt>File</tt> &rarr; <tt>Preferences</tt>
-  &rarr; <tt>Network</tt> &rarr; <tt>Edit (space)</tt>).
-- To tell the host about the server, sudo-edit <tt>/etc/hosts</tt>
-  _on the host system_. For example, if you gave your server the
-  fully qualified domain name "test.local", insert a line
-  <tt>192.168.56.__101__ test.local</tt>.
-- After starting up the virtual machine and installing the Ubuntu
-  Server (from a previously [downloaded ISO
-  file](http://www.ubuntu.com/download/server)), sudo-edit the
-  file <tt>/etc/network/interfaces</tt>:
-  ```
-  auto eth0
-  iface eth0 inet static
-	address 192.168.56.__101__
+Since you want to communicate via SSH with the virtual server (to
+simulate a remote real server), it is important to configure the
+network. I have configured three network cards for my virtual server:
+
+1. Host-only network (<tt>eth0</tt>). This is used for SSH connections
+   from my laptop to the server. It is configured to use static IPs
+   (see below).
+2. Adapter 2 is bridged to my host's wireless card.
+3. Adapter 3 is bridged to my host's ethernet card.
+
+The reason for this apparent complexity is that my laptop is not
+always connected to the internet, and if it is, it may use wireless or
+ethernet. Using a host-only adapter allows me to have my own 'virtual'
+network regardless of whether my laptop is online or not.
+   
+
+### Configuring static IP for the host and the guest ###
+   
+Since I do not configure a nameserver, I must make sure that the
+laptop and virtual server can always communicate. This is accomplished
+using static IP.
+
+Disable the VirtualBox DHCP server for the host-only network
+(<tt>File</tt> &rarr; <tt>Preferences</tt> &rarr; <tt>Network</tt>
+&rarr; <tt>Edit (space)</tt>).
+
+To tell the host about the server, sudo-edit <tt>/etc/hosts</tt> _on
+the host system_. For example, if you gave your server the fully
+qualified domain name "test.local", insert a line
+<tt>192.168.56.__101__ test.local</tt>.
+
+After starting up the virtual machine and installing the Ubuntu Server
+(from a previously [downloaded ISO
+file](http://www.ubuntu.com/download/server)), sudo-edit the file
+<tt>/etc/network/interfaces</tt>:
+
+	auto eth0
+	iface eth0 inet static
+	address 192.168.56.101
 	netmask 255.255.255.0
-  ```
-- Note that this configuration does not give the virtual server
-  access to the internet! If you want to do this, configure an
-  additional network interface for the virtual machine as 'NAT'
-  (from the VirtualBox GUI). Then, add <tt>auto eth1</tt> and
-  <tt>iface eth1 inet dhcp</tt> to the interfaces file.
+
+The other two interfaces (<tt>eth1</tt> and <tt>eth2</tt>) on the
+server are configured to *not* automatically connect (i.e., there is
+no <tt>auto ethX</tt> line in <tt>/etc/network/interfaces</tt> on the
+server). This prevents the server from spending a long time waiting
+for network information on startup when my laptop is not connected to
+the internet.
+
+Since the configure-server script needs to download a number of
+packages from the repositories, you need to make sure to have an
+internet connection:
+
+	sudo ifup eth1
 
 
 License
@@ -141,4 +179,5 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-<!-- vim:set tw=70 fo=tcroqn flp=\\(^|\\s{-}\\)[-*]\\s* : -->
+
+<!-- vim:set tw=70 fo=tcroqn : -->
