@@ -50,6 +50,7 @@ restart_postfix=0
 
 shopt -s nocasematch
 
+
 # #######################################################################
 # Helper functions
 # #######################################################################
@@ -81,19 +82,41 @@ yesno() {
 
 # Prints out a heading
 heading() {
-	echo -e $bold"\n$msgstr$1"$normal
+	echo -e $bold"\n$msgstr$*"$normal
 }
 
 # Prints out a message
 # (Currently this uses the heading() function, but may be adjusted
 # according to personal preference.)
 message() {
-	heading "$1"
+	heading "$*"
+}
+
+# Checks if a package is installed and installs it if necessary.
+# This could also be accomplished by simply attempting to install it 
+# using 'apt-get install', but this may take some time as apt-get
+# builds the database first.
+install() {
+	local need_to_install=false
+	# Use "$@" in the FOR loop to get expansion like "$1" "$2" etc.
+	for p in "$@"; do
+		if [[ $(dpkg -s $p 2>&1 | grep -i "not installed") ]]; then
+			local need_to_install=true
+			break
+		fi
+	done
+	# Use "$*" in the messages to get expansion like "$1 $2 $3" etc.
+	if (( need_to_install )); then
+		heading "Installing '$*'..."
+		sudo apt-get install -qqy $@
+	else
+		heading "'$*': installed already."
+	fi
 }
 
 
 # #######################################################################
-# Begin script
+# Begin configuration
 # #######################################################################
 
 if [[ $(whoami) == "root" ]]; then
@@ -109,10 +132,7 @@ heading "This will configure the Ubuntu server. ***"
 # ########################################################################
 
 # Use virt-what to determine if we are running in a virtual machine.
-if [ -z `which virt-what` ]; then
-	heading "Installing virt-what..."
-	sudo apt-get install -qy virt-what
-fi
+install virt-what
 
 heading "Requesting sudo password to find out about virtual environment..."
 vm=`sudo virt-what`
@@ -122,7 +142,7 @@ if [ "$vm" == 'virtualbox' ]; then
 		heading "Installing guest additions... (please have CD virtually inserted)"
 		sudo mount /dev/sr0 /media/cdrom
 		if [ $? -eq 0 ]; then
-			sudo apt-get install dkms build-essential
+			install dkms build-essential
 			sudo /media/cdrom/VBoxLinuxAdditions.run
 		else
 			heading "Could not mount guest additions cd -- exiting..."
@@ -142,6 +162,11 @@ else # not running in a Virtual Box
 		if (( $? )); then
 			message "Updating..."
 			rsync -vuza $0 $user@$server_fqdn:.
+			code=$?
+			if (( code )); then
+				message "An error occurred (rsync exit code: $code). Bye."
+				exit 3
+			fi
 			rsync -vuza $user@$server_fqdn:$(basename $0) .
 			if (( $?==0 )); then
 				yesno "Log into secure shell?" answer y
@@ -165,11 +190,9 @@ else # not running in a Virtual Box
 fi
 
 # From here on, we can be pretty sure to be on the server.
-# Let's check for pwgen (needed to generate passwords)
-if [[ -z $(which pwgen) ]]; then
-	heading "Installing pwgen..."
-	sudo apt-get -qy install pwgen
-fi
+# Install required packages
+install postfix postfix-ldap dovecot pwgen slapd slapd-utils bsd-mailx
+install spamassassin clamav amavisd-new phpmyadmin php-pear
 
 # Internal passwords for LDAP access
 postfix_ldap_pw=$(pwgen -cns 32 1)
@@ -233,13 +256,6 @@ fi
 # LDAP configuration
 # ##################
 
-if [[ $(dpkg -s slapd 2>&1 | grep "not installed") ]]; then
-	heading "Installing LDAP..."
-	sudo apt-get -qy install slapd lapd-utils
-else
-	heading "LDAP already installed."
-fi
-
 # DIT:
 # http://www.asciiflow.com/#6112247197461489368/1725253880
 #                                     +----------------+
@@ -274,6 +290,7 @@ olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn
 
 # Add courier-authlib-ldap schema:
 # Converted from authldap.schema to cn=config format by D. Kraus, 29-Jul-12
+# See $homepage
 # Original file extracted from:
 # http://de.archive.ubuntu.com/ubuntu/pool/universe/c/courier-authlib/courier-authlib-ldap_0.63.0-4build1_amd64.deb
 # Line breaks were removed on purpose, as strange errors occurred on import.
@@ -344,6 +361,7 @@ then
 		mail: $user
 		maildrop: root
 		maildrop: postmaster
+		maildrop: abuse
 		# The homeDirectory attribute is required by the schema, but we leave
 		# it empty since we are going to use $vmailhome as the uniform base
 		# for all accounts.
@@ -361,45 +379,13 @@ fi
 # ######################################################################
 
 
-# Enable system to send administrative emails
-
-if [[ $(dpkg -s bsd-mailx 2>&1 | grep "not installed") ]]; then
-	heading "Installing bsd-mailx package..."
-	sudo apt-get -qy install bsd-mailx
-else
-	heading "bsd-mailx package already installed."
-fi
-
-
-# Install spamassassin, clamav, and amavisd-new
-
-if [[ $(dpkg -s spamassassin 2>&1 | grep "not installed") ]]; then
-	heading "Installing spamassassin..."
-	sudo apt-get -qy install spamassassin
-else
-	heading "spamassassin already installed."
-fi
-
+# Set up spamassassin, clamav, and amavisd-new
 if [[ -z $(grep -i 'ENABLED=1' /etc/default/spamassassin) ]]; then
 	heading "Enabling spamassassin (including cron job for nightly updates)..."
 	sudo sed -i 's/^ENABLED=.$/ENABLED=1/' /etc/default/spamassassin
 	sudo sed -i 's/^CRON=.$/CRON=1/' /etc/default/spamassassin
 	echo "Starting spamassassin..."
 	sudo service spamassassin start
-fi
-
-if [[ $(dpkg -s clamav 2>&1 | grep "not installed") ]]; then
-	heading "Installing clamav..."
-	sudo apt-get -qy install clamav
-else
-	heading "clamav already installed."
-fi
-
-if [[ $(dpkg -s amavisd-new 2>&1 | grep "not installed") ]]; then
-	heading "Installing amavisd-new..."
-	sudo apt-get -qy install amavisd-new
-else
-	heading "amavisd-new already installed."
 fi
 
 
@@ -412,7 +398,7 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 	sudo mkdir $postfix_ldap_dir
 	sudo chgrp postfix $postfix_ldap_dir
 	sudo chmod 750 $postfix_ldap_dir
-	sudo tee $postfix_ldap_dir/ldap-aliases.cf <<-EOF
+	sudo tee $postfix_ldap_dir/ldap-aliases.cf > /dev/null <<-EOF
 		# Postfix LDAP map generated by $(basename $0)
 		# See $homepage
 		# $(date --rfc-3339=seconds)
@@ -435,7 +421,7 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 		result_format = %u
 		result_attribute = mail
 		EOF
-	sudo tee $postfix_ldap_dir/ldap-local-recipients.cf <<-EOF
+	sudo tee $postfix_ldap_dir/ldap-local-recipients.cf > /dev/null <<-EOF
 		# Postfix LDAP map generated by $(basename $0)
 		# See $homepage
 		# $(date --rfc-3339=seconds)
@@ -468,29 +454,18 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 	restart_postfix=1
 fi
 
-# Create alias for current user
-# TODO: remove this? when ldap is configured
-if [[ -z $(grep "root:\s*`whoami`" /etc/aliases) ]]; then
-	yesno "Create root -> $(whoami) alias?" answer y
-	if (( $? )); then
-		heading "Creating alias..."
-		echo "root: $(whoami)" | sudo tee -a /etc/aliases
-		sudo newaliases
-	fi
-else
-	heading "Mail alias for root -> $(whoami) already configured."
-fi
 
-if [[ -z $(grep dovecot /etc/postfix/master.cf) ]]; then
+if [[ -z $(grep dovecot $postfix_base/master.cf) ]]; then
 	heading "Configuring Postfix to use Dovecot as MDA..."
-	sudo tee -a /etc/postfix/master.cf <<EOF
+	sudo tee -a $postfix_base/master.cf > /dev/null <<EOF
 dovecot   unix  -       n       n       -       -       pipe
   flags=DRhu user=$vmail:$vmail argv=/usr/lib/dovecot/deliver -f \${sender} -d \${recipient}
 EOF
-	if [[ -z $(grep dovecot /etc/postfix/main.cf) ]]; then
+	if [[ -z $(grep dovecot $postfix_base/main.cf) ]]; then
 		sudo postconf -e "dovecot_destination_recipient_limit = 1"
 		sudo postconf -e "local_transport = dovecot"
-		sudo sed -i 's/^mailbox_command/#&/' /etc/postfix/main.cf
+		# Comment out the mailbox_command directive:
+		sudo sed -i 's/^mailbox_command/#&/' $postfix_base/main.cf
 	fi
 	restart_postfix=1
 fi
@@ -511,11 +486,11 @@ auth-default {
 }
 passdb {
 	driver: ldap
-	args: $dovecot_ldap/dovecot-ldap.conf
+	args: $dovecot_ldap_dir/dovecot-ldap.conf
 }
 userdb {
 	driver: ldap
-	args: $dovecot_ldap/dovecot-ldap.conf
+	args: $dovecot_ldap_dir/dovecot-ldap.conf
 }
 EOF
 	sudo chmod 644 $dovecot_confd/99-custom.conf
@@ -570,28 +545,15 @@ if (( restart_dovecot )); then sudo service dovecot restart; fi
 # PHPmyadmin
 # ######################
 
-if [[ $(dpkg -s phpmyadmin 2>&1 | grep "not installed" ) ]]; then
-	heading "Installing phpMyAdmin..."
-	sudo apt-get -qy install phpmyadmin
-	if [[ ! $(grep ForceSSL /etc/phpmyadmin/config.inc.php) ]]; then
-		echo "\$cfg['ForceSSL']=true;" | sudo tee -a /etc/phpmyadmin/config.inc.php
-	fi
-else
-	heading "phpMyAdmin already installed."
+if [[ ! $(grep ForceSSL /etc/phpmyadmin/config.inc.php) ]]; then
+	echo "\$cfg['ForceSSL']=true;" | \
+		sudo tee -a /etc/phpmyadmin/config.inc.php > /dev/null
 fi
-
 
 
 # ######################
 # Horde configuration
 # ######################
-
-if [[ $(dpkg -s php-pear 2>&1 | grep "not installed" ) ]]; then
-	heading "Installing PEAR..."
-	sudo apt-get -qy install php-pear
-else
-	heading "PEAR already installed."
-fi
 
 if [[ ! -d /var/horde ]]; then
 	heading "Installing Horde..."
