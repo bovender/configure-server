@@ -19,6 +19,7 @@ tld=box
 server_fqdn=$subdomain.$domain.$tld
 server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
 user=daniel
+mail=bovender
 full_user_name="Daniel Kraus"
 # simple password for demonstration purposes (will be used in LDAP)
 pw=pass 
@@ -40,6 +41,11 @@ dovecot_ldap_dir=$dovecot_base/ldap
 ldapbaseDN="dc=$domain,dc=$tld"
 ldapusersDN="ou=users,$ldapbaseDN"
 ldapauthDN="ou=auth,$ldapbaseDN"
+adminDN="cn=admin,$ldapbaseDN"
+# Do not change the following two, as 'dovecot' and 'postfix' are
+# hard-coded elsewhere (namely, in the 'cn: ...' directives of LDIF)
+dovecotDN="cn=dovecot,$ldapauthDN"
+postfixDN="cn=postfix,$ldapauthDN"
 
 # Internal ('work') variables
 homepage="http://github.com/bovender/configure-server"
@@ -265,28 +271,59 @@ fi
 #                        |  ou=auth  |                   |  ou=users |
 #                        +-----------+                   +-----------+
 
-if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// -b "cn=config" "cn=schema" dn) ]]
+# Check if the LDAP backend database (hdb) already contains an ACL directive
+# for Dovecot. If none is found, assume that we need to configure the backend
+# database.
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// -s one \
+	-b "olcDatabase={1}hdb,cn=config" "olcAccess=*dovecot*" dn 2>/dev/null ) ]]
 then
 	# Add the schema, ACLs and first user account to LDAP.
 	# Be aware that LDAP is picky about leading space!
 
-	message "Adding schema and access control lists (ACLs) to LDAP's cn=config..."
+	message "Adding access control lists (ACLs) to LDAP backend database..."
 	# Ubuntu pre-configures the OpenLDAP online configuration such
 	# that it is accessible as the system root, therefore we sudo
 	# the following command.
-	sudo ldapadd -Y EXTERNAL -H ldapi:/// <<EOF
-# Configure ACLs for the hdb backend database:
-# First, remove the existing ACLs:
+	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
+# Configure ACLs for the hdb backend database.
+# Note: Continued lines MUST have a trailing space; continuation lines
+# MUST have a leading space.
+# First, remove the existing ACLs
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
 delete: olcAccess
-olcAccess: {0}
 
-# Then, add our own ACLs:
+# Then, add our own ACLs
+# (Note that we cannot use "-" lines here, because the entire operation would
+# fail if an olcAccess attribute had not been present already.
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
 add: olcAccess
-olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn=dovecot,$ldapauthDN" read by anonymous auth by self write by * none
+# Passwords may only be accessed for authentication, or modified by the 
+# correponsing users and admin.
+olcAccess: to attrs=userPassword 
+ by dn.exact=$adminDN manage 
+ by dn.exact=$dovecotDN read 
+ by anonymous auth 
+ by self write 
+ by * none
+# Only admin may write to the uid, mail, and maildrop fields
+olcAccess: to attrs=uid,mail,maildrop 
+ by dn=$adminDN manage 
+ by self read 
+ by users read 
+ by * none
+# An owner of an entry may modify it (and so may the admin);
+# deny read access to non-authenticated entities
+olcAccess: to * 
+ by self write 
+ by users read 
+ by * none
+EOF
+else
+	message "LDAP ACLs already configured..."
+fi
+
 
 # Add courier-authlib-ldap schema:
 # Converted from authldap.schema to cn=config format by D. Kraus, 29-Jul-12
@@ -295,7 +332,11 @@ olcAccess: {0}to attrs=userPassword by dn="cn=admin,$ldapbaseDN" write by dn="cn
 # http://de.archive.ubuntu.com/ubuntu/pool/universe/c/courier-authlib/courier-authlib-ldap_0.63.0-4build1_amd64.deb
 # Line breaks were removed on purpose, as strange errors occurred on import.
 # Depends on: nis.schema, which depends on cosine.schema
-
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+	-b "cn=schema,cn=config" "cn=*authldap*" dn 2>/dev/null ) ]]
+then
+	heading "Adding authldap schema to LDAP directory..."
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c <<EOF
 dn: cn=authldap,cn=schema,cn=config
 objectClass: olcSchemaConfig
 cn: authldap
@@ -317,6 +358,8 @@ olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.1 NAME 'CourierMailAccount' DESC 'Mail
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias' DESC 'Mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( mail $ maildrop ) MAY ( mailsource $ description ) )
 olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias' DESC 'Domain mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( virtualdomain $ virtualdomainuser ) MAY ( mailsource $ description ) )
 EOF
+else
+	message "authldap schema already imported into LDAP."
 fi
 
 heading "Binding to LDAP directory..."
@@ -324,9 +367,9 @@ echo "For binding to the LDAP directory, please enter the password that you used
 echo "during installation of this server."
 code=-1
 until (( $code==0 )); do
-	read -sp "LDAP password for cn=admin,$ldapbaseDN: " ldap_admin_pw
+	read -sp "LDAP password for $adminDN: " ldap_admin_pw
 	if [[ $ldap_admin_pw ]]; then
-		ldapsearch -LLL -w "$ldap_admin_pw" -D "cn=admin,$ldapbaseDN" \
+		ldapsearch -LLL -w "$ldap_admin_pw" -D "$adminDN" \
 			-b "$ldapbaseDN" "$ldapbaseDN" dc /dev/null
 		code=$?
 		if (( $code==49 )); then
@@ -342,12 +385,12 @@ if (( $code!=0 )); then
 	exit 2
 fi
 
-if [[ -z $(ldapsearch -LLL -w "$ldap_admin_pw" -D "cn=admin,$ldapbaseDN" -b "$ldapusersDN" "uid=$user" uid) ]]
+if [[ -z $(ldapsearch -LLL -w "$ldap_admin_pw" -D "$adminDN" -b "$ldapusersDN" "uid=$user" uid) ]]
 then
 	message "Adding an entry for user $user to the LDAP tree..."
-	ldapadd -c -x -w $ldap_admin_pw -D "cn=admin,$ldapbaseDN" <<-EOF
+	ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 		dn: $ldapusersDN
-		ou: ${ldapusersDN%%,*}
+		ou: users
 		objectClass: organizationalUnit
 
 		dn: uid=$user,$ldapusersDN
@@ -358,7 +401,7 @@ then
 		sn: $(echo $full_user_name | sed 's/^.* //')
 		cn: $full_user_name
 		userPassword: $pw
-		mail: $user
+		mail: $mail
 		maildrop: root
 		maildrop: postmaster
 		maildrop: abuse
@@ -371,6 +414,38 @@ else
 	message "User $user already has an LDAP entry under $ldapusersDN."
 fi
 
+message "Adding/replacing LDAP entries for the Dovecot and Postfix proxy users..."
+ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
+	dn $postfixDN
+	changetype: delete
+
+	dn $dovecotDN
+	changetype: delete
+
+	# ldapadd will complain if $ldapauth exists already, but we don't care
+	# as we do not need to update it, we just need to make sure it's there
+	dn: $ldapauthDN
+	changetype: add
+	ou: auth
+	objectClass: organizationalUnit
+
+	# Add updated entries for Postfix and Dovecot
+	dn: $postfixDN
+	changetype: add
+	objectClass: organizationalRole
+	objectClass: simpleSecurityObject
+	cn: postfix
+	userPassword: $postfix_ldap_pw
+	description: Postfix proxy user
+	
+	dn: $dovecotDN
+	changetype: add
+	objectClass: organizationalRole
+	objectClass: simpleSecurityObject
+	cn: dovecot
+	userPassword: $dovecot_ldap_pw
+	description: Dovecot proxy user
+	EOF
 
 # ######################################################################
 # Postfix configuration
@@ -395,9 +470,7 @@ fi
 
 if [[ true || ! -d $postfix_ldap_dir ]]; then
 	heading "Configuring Postfix to use LDAP maps..."
-	sudo mkdir $postfix_ldap_dir
-	sudo chgrp postfix $postfix_ldap_dir
-	sudo chmod 750 $postfix_ldap_dir
+	sudo mkdir $postfix_ldap_dir 2>/dev/null
 	sudo tee $postfix_ldap_dir/ldap-aliases.cf > /dev/null <<-EOF
 		# Postfix LDAP map generated by $(basename $0)
 		# See $homepage
@@ -406,7 +479,7 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 		server_host = localhost
 
 		bind = no
-		bind_dn = cn=postfix,$ldapauthDN
+		bind_dn = $postfixDN
 		bind_pw = $postfix_ldap_pw
 
 		search_base = $ldapusersDN
@@ -429,7 +502,7 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 		server_host = localhost
 
 		bind = no
-		bind_dn = cn=postfix,$ldapauthDN
+		bind_dn = $postfixDN
 		bind_pw = $postfix_ldap_pw
 
 		search_base = $ldapusersDN
@@ -441,8 +514,8 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 
 		result_attribute = uid
 		EOF
-	sudo chgrp postfix $postfix_ldap_dir/*
-	sudo chmod 750     $postfix_ldap_dir/*
+	sudo chgrp -R postfix $postfix_ldap_dir
+	sudo chmod -R 750     $postfix_ldap_dir
 
 	# Configure Postfix to use LDAP to resolve local aliases.
 	# If you want to use virtual domains (which implicates resolving
