@@ -197,7 +197,8 @@ fi
 
 # From here on, we can be pretty sure to be on the server.
 # Install required packages
-install postfix postfix-ldap dovecot pwgen slapd slapd-utils bsd-mailx
+install postfix postfix-ldap dovecot dovecot-ldap
+install pwgen slapd slapd-utils bsd-mailx
 install spamassassin clamav amavisd-new phpmyadmin php-pear
 
 # Internal passwords for LDAP access
@@ -416,10 +417,10 @@ fi
 
 message "Adding/replacing LDAP entries for the Dovecot and Postfix proxy users..."
 ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
-	dn $postfixDN
+	dn: $postfixDN
 	changetype: delete
 
-	dn $dovecotDN
+	dn: $dovecotDN
 	changetype: delete
 
 	# ldapadd will complain if $ldapauth exists already, but we don't care
@@ -548,22 +549,20 @@ fi
 # Dovecot configuration
 # #######################################################################
 
-if [[ ! -a $dovecot_confd/99-custom.conf ]]; then
+# TODO: Remove 'true'
+if [[ true || ! -a $dovecot_confd/99-custom.conf ]]; then
 	heading "Adding Dovecot custom configuration..."
 	sudo tee $dovecot_confd/99-custom.conf > /dev/null <<EOF
 # As Postfix will make sure that the destination user exists, we can
 # tell Dovecot to allow_all_users.
 
-auth-default {
-	mechanisms: plain login digest-md5 cram-md5
-}
 passdb {
-	driver: ldap
-	args: $dovecot_ldap_dir/dovecot-ldap.conf
+	driver = ldap
+	args = $dovecot_ldap_dir/dovecot-ldap-passdb.conf
 }
 userdb {
-	driver: ldap
-	args: $dovecot_ldap_dir/dovecot-ldap.conf
+	driver = ldap
+	args = $dovecot_ldap_dir/dovecot-ldap-userdb.conf
 }
 EOF
 	sudo chmod 644 $dovecot_confd/99-custom.conf
@@ -571,27 +570,31 @@ else
 	heading "Dovecot custom configuration already present."
 fi
 
-# # TODO: make this use sasl
-# if [[ ! -a $dovecot_ldap/dovecot-ldap.conf ]]; then
-# 	sudo mkdir $dovecot_ldap
-# 	sudo chown vmail:vmail $dovecot_ldap
-# 	tee $dovecot_ldap/dovecot-ldap.conf <<-EOF
-# 		uris = ldap://localhost
-# 		dn = dovecot
-# 		dnpass = dovecot_pass
-# 		sasl_bind = no
-# 		sasl_mech = DIGEST-MD5
-# 		ldap_version = 3
-# 		base = o=Abimus
-# 		deref = never
-# 		scope = subtree
-# 		user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
-# 		user_filter = (&(objectClass=posixAccount)(uid=%u))
-# 		pass_attrs = uid=user,userPassword=password
-# 		pass_filter = (&(objectClass=posixAccount)(uid=%u))
-# 		default_pass_scheme = CLEARTEXT
-# 		EOF
-# fi
+# TODO: make this use sasl
+if [[ ! -a $dovecot_ldap_dir/dovecot-ldap-passdb.conf ]]; then
+	sudo mkdir $dovecot_ldap_dir 2>&1 >/dev/null
+	sudo tee $dovecot_ldap_dir/dovecot-ldap-passdb.conf >/dev/null <<-EOF
+		uris = ldapi:///
+		dn = dovecot
+		dnpass = $dovecot_ldap_pw
+		sasl_bind = no
+		sasl_mech = DIGEST-MD5
+		ldap_version = 3
+		base = $ldapusersDN
+		deref = never
+		scope = subtree
+		# user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
+		# user_filter = (&(objectClass=posixAccount)(uid=%u))
+		pass_attrs = uid=user,userPassword=password
+		pass_filter = (&(objectClass=posixAccount)(uid=%Ln))
+		default_pass_scheme = CLEARTEXT
+		EOF
+	sudo chmod 600 $dovecot_ldap_dir/dovecot-ldap-passdb.confd
+fi
+if [[ ! -a $dovecot_ldap_dir/dovecot-ldap-passdb.conf ]]; then
+	sudo ln -s $dovecot_ldap_dir/dovecot-ldap-passdb.conf \
+		$dovecot_ldap_dir/dovecot-ldap-userdb.conf
+fi
 
 # Add the vmail user.
 # No need to make individual user's directories as Dovecot will
