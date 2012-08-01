@@ -32,7 +32,7 @@ The only prerogative for this script is that you have installed Ubuntu
 Server with the following options:
 
 - LAMP
-- Postfix
+- [Postfix][]
 
 The script does not support name server (DNS) configuration.
 
@@ -43,27 +43,28 @@ Features
 The script configures the following services:
 
 - Certificate-based SSH login
-- [Postfix](http://postfix.org) mail server with user management in LDAP directory and
+- [Postfix][] mail server with user management in LDAP directory and
   SMTP-AUTH and TLS/STARTTLS support
-- [Dovecot](http://dovecot.org) IMAP/POP3 server with user management in LDAP directory
+- [Dovecot][] IMAP/POP3 server with user management in LDAP directory
   and TLS/STARTTLS support
-- [OpenLDAP](http://openldap.org) server for central user management and single sign-on
-- [Horde](http://horde.org) groupware
-- [OwnCloud](http://owncloud.org) cloud server
+- [OpenLDAP][] server for central user management and single sign-on
+- [Horde][] groupware
+- [OwnCloud][] cloud server
 
 
 Customizing the script
 ----------------------
 
-The script can (and should) be customized by means of a couple of 
-configuration variables right at the top. Most importantly, if you 
-want to use the script on your own server, you __must__ change at 
+The script __must__ be customized by means of a couple of
+configuration variables right at the top. Most importantly, if you
+want to use the script on your own server, you __must__ change at
 least the following variables:
 
-- <tt>$domain</tt>
-- <tt>$tld</tt>
-- <tt>$user</tt>
-- <tt>$full\_user\_name</tt>
+- `$domain`
+- `$tld`
+- `$user` -- this should be the same user that you created during
+  installation of Ubuntu Server edition.
+- `$full\_user\_name`
 
 
 Running the script
@@ -88,7 +89,95 @@ before logging you in.
 Configuration notes
 -------------------
 
-TODO
+The configuration notes assume that you have a basic knowledge of the
+software. If you are (like me) a server newbie, you may find the
+following resources (online & offline) useful:
+
+- Postfix:  <www.postfix.org>, [The Book of Postfix][pf-book]
+- Dovecot:  <www.dovecot.org>
+- OpenLDAP: [Zytrax' Guide for Rocket Scientists][zytrax]
+- [Ubuntu Server Guide][guide]
+
+
+### SSH ###
+
+The script configures SSH to permit only certificate-based logins.
+Without a certificate, you will not be able to log into your server.
+This means that the certificate must be uploaded prior to configuring
+the SSH daemon. The script will take care of this.
+
+
+### LDAP ###
+
+I chose to set up an LDAP directory server because I was intrigued by
+the notion of a unified sign-in (single sign-in) for all services, as
+well as a private and shared address books that are accessible from
+remote clients such as Thunderbird.
+
+LDAP layout is heavily inspired by [The Book of Postfix][pf-book].
+
+The root of the data information tree (DIT) is construed from the
+`$domain` and `$tld` variables defined in the script.
+
+User information is stored unter __ou=users,dc=$domain,dc=$tld__. The
+entries' structural object class is `inetOrgPerson`. To be able to
+store information about mail aliases, the Postfix documentation
+[suggests][pf-ldap] using attributes such as `mailDrop` and
+`mailAcceptingGeneralId`. [The Book of Postfix][pf-book] (first German
+edition) also uses `mailDrop` in an example setup of [Postfix][] and
+[Courier-IMAP][]. The problem here is that these attributes are not
+defined in the schemes that [OpenLDAP][] ships with on Ubuntu Server.
+The _cosine_ schema does include a structual object class
+`pilotPerson`, which defines attributes such as `otherMail` which one
+could use as a storage field for aliases. But since both
+`inetOrgPerson` and `pilotPerson` are _structural_ classes, you cannot
+assign an entry to both of them at the same time. Therefore, I
+downloaded the Courier schema from the Ubuntu repositories, converted
+it to [OLC][zytrax-olc] ("cn=schema,cn=config") format, and included
+it in the script.
+
+
+### Postfix ###
+
+The entire Postfix setup is _heavily_ inspired by [The Book of
+Postfix][pfbook].
+
+Even though my server is intended for a rather small group of people,
+I resorted to configuring Postfix for virtual users, rather than users
+registered on the Linux system, to make it more secure and easier to
+maintain. In my setup, all virtual users share the same domain.
+Therefore, in the spirit of keeping things [DRY][], the domain part of
+all e-mail addresses is omitted from the LDAP entries. As a
+consequence, the various configuration directives (LDAP queries,
+Dovecot's mailbox directive) contain placeholders for the 'local' part
+of an e-mail address, rather than the fully-qualified address.
+
+Once an email is accepted, we let Postfix hand it over to the Dovecot
+LDA by virtue of a piped transport. In this context it is important to
+understand how Postfix [rewrites addresses][pf-addr]. As soon as
+we replace Postfix' own `local` transport with Dovecot, the
+`local_aliases` map no longer works. This is because the
+`local_aliases` map is used during address rewriting *when an e-mail
+is delivered*, rather than *when an e-mail is received*. With Dovecot
+set up as local delivery agent, Postfix will *never* consult
+`local_aliases`. 
+
+
+[postfix]:    http://www.postfix.org
+[pf-book]:    http://www.postfix-book.com
+[pf-addr]:    http://www.postfix.org/ADDRESS_REWRITING_README.html
+[pf-ldap]:    http://www.postfix.org/LDAP_README.html#example_virtual
+[dovecot]:    http://www.dovecot.org
+[courier]:    http://www.courier-mta.org/imap
+[horde]:      http://www.horde.org
+[openldap]:   http://www.openldap.org
+[owncloud]:   http://www.owncloud.org
+[zytrax]:     http://zytrax.com/books/ldap
+[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas
+				"OLC: OnLine Configuration, a feature of newer
+				OpenLDAP versions"
+[guide]:      https://help.ubuntu.com/12.04/serverguide/index.html
+[dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
 
 
 Setting up a Ubuntu Server VM
