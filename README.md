@@ -119,7 +119,7 @@ LDAP layout is heavily inspired by [The Book of Postfix][pf-book].
 The root of the data information tree (DIT) is construed from the
 `$domain` and `$tld` variables defined in the script.
 
-User information is stored unter __ou=users,dc=$domain,dc=$tld__. The
+User information is stored unter `ou=users,dc=$domain,dc=$tld` The
 entries' structural object class is `inetOrgPerson`. To be able to
 store information about mail aliases, the Postfix documentation
 [suggests][pf-ldap] using attributes such as `mailDrop` and
@@ -135,6 +135,32 @@ assign an entry to both of them at the same time. Therefore, I
 downloaded the Courier schema from the Ubuntu repositories, converted
 it to [OLC][zytrax-olc] ("cn=schema,cn=config") format, and included
 it in the script.
+
+Creating new attributes and classes without registered object ID (OID)
+is not considered good LDAP practice. Therefore I refrained from
+simply creating my own objectClass and chose to use the Courier
+schemas.
+
+To enable Postfix and Dovecot to look up information in the LDAP
+directory, another branch of the DIT is created as
+`ou=auth,dc=$domain,dc=$tld`; the corresponding entries are:
+
+ cn=dovecot,ou=auth,dc=$domain,dc=$tld
+ cn=postfix,ou=auth,dc=$domain,dc=$tld
+
+These two users have ACL-controlled access to
+`ou=users,dc=$domain,dc=$tld`.
+
+In summary, the DIT that the script sets up looks as follows:
+
+TODO
+
+__Important note:__ OpenLDAP is _extremely_ picky about spaces in LDIF
+files. Ordinarily every line is expected to have no leading spaces. If
+a line is continued, it must have a _trailing_ space, and the
+continuation line must have one _leading_ space. In my experience, a
+common cause of LDAP import errors is omission of the _trailing_ space
+on a continued line!
 
 
 ### Postfix ###
@@ -173,9 +199,7 @@ set up as local delivery agent, Postfix will *never* consult
 [openldap]:   http://www.openldap.org
 [owncloud]:   http://www.owncloud.org
 [zytrax]:     http://zytrax.com/books/ldap
-[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas
-				"OLC: OnLine Configuration, a feature of newer
-				OpenLDAP versions"
+[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas "OLC: OnLine Configuration, a feature of newer OpenLDAP versions"
 [guide]:      https://help.ubuntu.com/12.04/serverguide/index.html
 [dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
 
