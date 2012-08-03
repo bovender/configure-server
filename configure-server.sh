@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# TODO:
+# readme: dovecot-postfix does almost everything; need to specify passdb
+# and userdb for ldap use, this will automatically make postfix use sasl
+# with ldap as well
+
 # #######################################################################
 # Configure-server.sh
 # Script to configure a Ubuntu server.
@@ -18,8 +23,8 @@ domain=fritz
 tld=box
 server_fqdn=$subdomain.$domain.$tld
 server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
-user=daniel
-mail=bovender
+user=bovender
+mail=dk
 full_user_name="Daniel Kraus"
 # simple password for demonstration purposes (will be used in LDAP)
 pw=pass 
@@ -30,12 +35,10 @@ vmailhome=/var/$vmailuser
 postfix_base=/etc/postfix
 postfix_main=$postfix_base/main.cf
 postfix_master=$postfix_base/master.cf
-postfix_ldap_dir=$postfix_base/ldap
 
 # Dovecot configuration directories
 dovecot_base=/etc/dovecot
 dovecot_confd=$dovecot_base/conf.d
-dovecot_ldap_dir=$dovecot_base/ldap
 
 # LDAP DNs
 ldapbaseDN="dc=$domain,dc=$tld"
@@ -86,6 +89,16 @@ yesno() {
 	return 0
 }
 
+# Creates a backup file containing the original distribution's
+# configuration
+backup() {
+	for f in "$@"; do
+		if [[ ! -a "$f.dist" ]]; then
+			sudo cp "$f" "$f.dist"
+		fi
+	done
+}
+
 # Prints out a heading
 heading() {
 	echo -e $bold"\n$msgstr$*"$normal
@@ -103,16 +116,16 @@ message() {
 # using 'apt-get install', but this may take some time as apt-get
 # builds the database first.
 install() {
-	local need_to_install=false
+	local need_to_install=0
 	# Use "$@" in the FOR loop to get expansion like "$1" "$2" etc.
 	for p in "$@"; do
 		if [[ $(dpkg -s $p 2>&1 | grep -i "not installed") ]]; then
-			local need_to_install=true
+			local need_to_install=1
 			break
 		fi
 	done
 	# Use "$*" in the messages to get expansion like "$1 $2 $3" etc.
-	if (( need_to_install )); then
+	if (( $need_to_install )); then
 		heading "Installing '$*'..."
 		sudo apt-get install -qqy $@
 	else
@@ -197,13 +210,13 @@ fi
 
 # From here on, we can be pretty sure to be on the server.
 # Install required packages
-install postfix postfix-ldap dovecot dovecot-ldap
-install pwgen slapd slapd-utils bsd-mailx
+install dovecot-postfix dovecot-ldap postfix-ldap 
+install pwgen slapd ldap-utils bsd-mailx
 install spamassassin clamav amavisd-new phpmyadmin php-pear
 
 # Internal passwords for LDAP access
-postfix_ldap_pw=$(pwgen -cns 32 1)
-dovecot_ldap_pw=$(pwgen -cns 32 1)
+postfix_ldap_pw=$(pwgen -cns 16 1)
+dovecot_ldap_pw=$(pwgen -cns 16 1)
 
 
 # #####################################################################
@@ -303,8 +316,8 @@ add: olcAccess
 # Passwords may only be accessed for authentication, or modified by the 
 # correponsing users and admin.
 olcAccess: to attrs=userPassword 
- by dn.exact=$adminDN manage 
- by dn.exact=$dovecotDN read 
+ by dn=$adminDN manage 
+ by dn=$dovecotDN read 
  by anonymous auth 
  by self write 
  by * none
@@ -370,7 +383,7 @@ code=-1
 until (( $code==0 )); do
 	read -sp "LDAP password for $adminDN: " ldap_admin_pw
 	if [[ $ldap_admin_pw ]]; then
-		ldapsearch -LLL -w "$ldap_admin_pw" -D "$adminDN" \
+		ldapsearch -LLL -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// \
 			-b "$ldapbaseDN" "$ldapbaseDN" dc /dev/null
 		code=$?
 		if (( $code==49 )); then
@@ -386,10 +399,10 @@ if (( $code!=0 )); then
 	exit 2
 fi
 
-if [[ -z $(ldapsearch -LLL -w "$ldap_admin_pw" -D "$adminDN" -b "$ldapusersDN" "uid=$user" uid) ]]
+if [[ -z $(ldapsearch -LLL -w $ldap_admin_pw -D "$adminDN" -b "$ldapusersDN" "uid=$user" uid) ]]
 then
 	message "Adding an entry for user $user to the LDAP tree..."
-	ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
+	ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// <<-EOF
 		dn: $ldapusersDN
 		ou: users
 		objectClass: organizationalUnit
@@ -401,7 +414,6 @@ then
 		uid: $user
 		sn: $(echo $full_user_name | sed 's/^.* //')
 		cn: $full_user_name
-		userPassword: $pw
 		mail: $mail
 		maildrop: root
 		maildrop: postmaster
@@ -411,6 +423,7 @@ then
 		# for all accounts.
 		homeDirectory: 
 		EOF
+	ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$pw" "uid=$user,$ldapusersDN"
 else
 	message "User $user already has an LDAP entry under $ldapusersDN."
 fi
@@ -436,7 +449,7 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	objectClass: organizationalRole
 	objectClass: simpleSecurityObject
 	cn: postfix
-	userPassword: $postfix_ldap_pw
+	userPassword: 
 	description: Postfix proxy user
 	
 	dn: $dovecotDN
@@ -444,9 +457,12 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	objectClass: organizationalRole
 	objectClass: simpleSecurityObject
 	cn: dovecot
-	userPassword: $dovecot_ldap_pw
+	userPassword: 
 	description: Dovecot proxy user
 	EOF
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$postfix_ldap_pw" "$postfixDN"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$dovecot_ldap_pw" "$dovecotDN"
+
 
 # ######################################################################
 # Postfix configuration
@@ -458,6 +474,7 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 # Set up spamassassin, clamav, and amavisd-new
 if [[ -z $(grep -i 'ENABLED=1' /etc/default/spamassassin) ]]; then
 	heading "Enabling spamassassin (including cron job for nightly updates)..."
+	backup /etc/default/spamassassin
 	sudo sed -i 's/^ENABLED=.$/ENABLED=1/' /etc/default/spamassassin
 	sudo sed -i 's/^CRON=.$/CRON=1/' /etc/default/spamassassin
 	echo "Starting spamassassin..."
@@ -471,8 +488,7 @@ fi
 
 if [[ true || ! -d $postfix_ldap_dir ]]; then
 	heading "Configuring Postfix to use LDAP maps..."
-	sudo mkdir $postfix_ldap_dir 2>/dev/null
-	sudo tee $postfix_ldap_dir/ldap-aliases.cf > /dev/null <<-EOF
+	sudo tee $postfix_base/postfix-ldap-aliases.cf > /dev/null <<-EOF
 		# Postfix LDAP map generated by $(basename $0)
 		# See $homepage
 		# $(date --rfc-3339=seconds)
@@ -495,7 +511,7 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 		result_format = %u
 		result_attribute = mail
 		EOF
-	sudo tee $postfix_ldap_dir/ldap-local-recipients.cf > /dev/null <<-EOF
+	sudo tee $postfix_base/postfix-ldap-local-recipients.cf > /dev/null <<-EOF
 		# Postfix LDAP map generated by $(basename $0)
 		# See $homepage
 		# $(date --rfc-3339=seconds)
@@ -515,25 +531,27 @@ if [[ true || ! -d $postfix_ldap_dir ]]; then
 
 		result_attribute = uid
 		EOF
-	sudo chgrp -R postfix $postfix_ldap_dir
-	sudo chmod -R 750     $postfix_ldap_dir
+	sudo chmod 700 \
+		$postfix_base/postfix-ldap-aliases.cf \
+		$postfix_base/postfix-ldap-local-recipients.cf
 
 	# Configure Postfix to use LDAP to resolve local aliases.
 	# If you want to use virtual domains (which implicates resolving
 	# full email addresses rather than the local part only), you need
 	# to change this to virtual_alias_maps, and also use %s instead of
 	# %u in the LDAP configuration file above.
-	sudo postconf -e "alias_maps=proxy:ldap:$postfix_ldap_dir/ldap-aliases.cf"
-	sudo postconf -e "local_recipient_maps=proxy:ldap:$postfix_ldap_dir/ldap-local-recipients.cf"
+	sudo postconf -e "alias_maps=proxy:ldap:$postfix_base/postfix-ldap-aliases.cf"
+	sudo postconf -e "local_recipient_maps=proxy:ldap:$postfix_base/postfix-ldap-local-recipients.cf"
 	restart_postfix=1
 fi
 
 
 if [[ -z $(grep dovecot $postfix_base/master.cf) ]]; then
 	heading "Configuring Postfix to use Dovecot as MDA..."
+	backup $postfix_base/master.cf
 	sudo tee -a $postfix_base/master.cf > /dev/null <<EOF
 dovecot   unix  -       n       n       -       -       pipe
-  flags=DRhu user=$vmail:$vmail argv=/usr/lib/dovecot/deliver -f \${sender} -d \${recipient}
+  flags=DRhu user=$vmailuser:$vmailuser argv=/usr/lib/dovecot/deliver -f \${sender} -d \${recipient}
 EOF
 	if [[ -z $(grep dovecot $postfix_base/main.cf) ]]; then
 		sudo postconf -e "dovecot_destination_recipient_limit = 1"
@@ -550,68 +568,79 @@ fi
 # #######################################################################
 
 # TODO: Remove 'true'
-if [[ true || ! -a $dovecot_confd/99-custom.conf ]]; then
-	heading "Adding Dovecot custom configuration..."
-	sudo tee $dovecot_confd/99-custom.conf > /dev/null <<EOF
-# As Postfix will make sure that the destination user exists, we can
-# tell Dovecot to allow_all_users.
+if [[ true || -n $(grep '#!include auth-ldap' $dovecot_confd/10-auth.conf) ]]; then
+	pushd $dovecot_confd
+	backup 10-auth.conf auth-ldap.conf.ext
+	heading "Configuring Dovecot to look up users and passwords in LDAP directory..."
+	sudo tee auth-ldap.conf.ext >/dev/null <<EOF
+# Authentication for LDAP users. Included from auth.conf.
 
 passdb {
-	driver = ldap
-	args = $dovecot_ldap_dir/dovecot-ldap-passdb.conf
+  driver = ldap
+  args = $dovecot_base/dovecot-ldap.conf.ext
 }
+
 userdb {
-	driver = ldap
-	args = $dovecot_ldap_dir/dovecot-ldap-userdb.conf
+ driver = static
+ args = uid=$vmailuser gid=$vmailuser home=$vmailhome/%Ln
 }
 EOF
-	sudo chmod 644 $dovecot_confd/99-custom.conf
+	sudo sed -i -r 's/^#?(!include auth)/#\1/'           10-auth.conf
+	sudo sed -i -r 's/^#(!include auth-ldap)/\1/'        10-auth.conf
+	sudo sed -i -r "s/^#?(mail_.id =).*$/\1 $vmailuser/" 10-mail.conf
+	cd ..
+	backup dovecot-ldap.conf.ext
+	sudo tee dovecot-ldap.conf.ext >/dev/null <<EOF
+uris = ldapi:///
+dn = $dovecotDN
+dnpass = $dovecot_ldap_pw
+
+#sasl_bind = yes
+#sasl_mech =
+#sasl_realm =
+
+#tls = yes
+#tls_ca_cert_file =
+#tls_ca_cert_dir =
+#tls_cipher_suite =
+
+debug_level = -1
+
+auth_bind = no
+base = $ldapusersDN
+#deref = never
+pass_attrs = uid=user,userPassword=password
+
+# Change %Ln to %u if you want user IDs with domain
+pass_filter = (&(objectClass=inetOrgPerson)(uid=%Ln))
+
+#default_pass_scheme = CRYPT
+
+# Attributes and filter to get a list of all users
+#iterate_attrs = uid=user
+#iterate_filter = (objectClass=inetOrgPerson)
+EOF
+	sudo chmod 600 dovecot-ldap.conf.ext
+	popd
+	restart_dovecot=1
 else
 	heading "Dovecot custom configuration already present."
 fi
 
-# TODO: make this use sasl
-if [[ ! -a $dovecot_ldap_dir/dovecot-ldap-passdb.conf ]]; then
-	sudo mkdir $dovecot_ldap_dir 2>&1 >/dev/null
-	sudo tee $dovecot_ldap_dir/dovecot-ldap-passdb.conf >/dev/null <<-EOF
-		uris = ldapi:///
-		dn = dovecot
-		dnpass = $dovecot_ldap_pw
-		sasl_bind = no
-		sasl_mech = DIGEST-MD5
-		ldap_version = 3
-		base = $ldapusersDN
-		deref = never
-		scope = subtree
-		# user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
-		# user_filter = (&(objectClass=posixAccount)(uid=%u))
-		pass_attrs = uid=user,userPassword=password
-		pass_filter = (&(objectClass=posixAccount)(uid=%Ln))
-		default_pass_scheme = CLEARTEXT
-		EOF
-	sudo chmod 600 $dovecot_ldap_dir/dovecot-ldap-passdb.confd
-fi
-if [[ ! -a $dovecot_ldap_dir/dovecot-ldap-passdb.conf ]]; then
-	sudo ln -s $dovecot_ldap_dir/dovecot-ldap-passdb.conf \
-		$dovecot_ldap_dir/dovecot-ldap-userdb.conf
-fi
 
 # Add the vmail user.
 # No need to make individual user's directories as Dovecot will
 # take care of this.
-if [[ -z $(id $vmail) ]]; then
+if [[ -z $(id $vmailuser) ]]; then
 	heading "Adding vmail user..."
-	sudo adduser --system --home $vmailhome --uid 5000 --group $vmail
-	sudo chown $vmail:$vmail $vmailhome
+	sudo adduser --system --home $vmailhome --uid 5000 --group $vmailuser
+	sudo chown $vmailuser:$vmailuser $vmailhome
+	sudo chmod -R 750 $vmailhome
 else
-	heading "User vmail already exists."
+	heading "User $vmailuser already exists."
 fi
 
-
-# TODO:
-# dovecot --> static userdb with allow_all_users
-# (but make sure postfix verifies existence of user!)
-# create proper maildir: /var/spool/vmail/{user}/Maildir with permissions
+exit 10
 
 # Lastly, restart Postfix and Dovecot
 if (( restart_postfix )); then sudo service postfix restart; fi
