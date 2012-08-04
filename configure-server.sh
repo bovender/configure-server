@@ -588,6 +588,7 @@ if [[ $(grep -Pzo "auth-userdb.*\N\s*?#mode" $dovecot_confd/10-master.conf) ]]; 
 		s/^(\s*)#mode = 0600.*$/\1mode = 0660/; \
 		s/^(\s*)#user =.*$/\1user = $vmailuser/; \
 		s/^(\s*)#group =.*$/\1group = $vmailuser/ ;}" $dovecot_confd/10-master.conf
+	restart_dovecot=1
 else
 	message "Dovecot's auth-userdb socket permissions already adjusted."
 fi
