@@ -485,6 +485,44 @@ if [[ -z $(grep -i 'ENABLED=1' /etc/default/spamassassin) ]]; then
 	sudo service spamassassin start
 fi
 
+if [[ -z $(grep amavis $postfix_base/master.cf) ]]; then
+	heading "Creating Postfix service for amavisd-new..."
+	sudo tee -a $postfix_base/master.cf >/dev/null <<EOF
+amavisfeed unix    -       -       n        -      2     lmtp
+    -o lmtp_data_done_timeout=1200
+    -o lmtp_send_xforward_command=yes
+    -o disable_dns_lookups=yes
+    -o max_use=20
+127.0.0.1:10025 inet n    -       n       -       -     smtpd
+    -o content_filter=
+    -o smtpd_delay_reject=no
+    -o smtpd_client_restrictions=permit_mynetworks,reject
+    -o smtpd_helo_restrictions=
+    -o smtpd_sender_restrictions=
+    -o smtpd_recipient_restrictions=permit_mynetworks,reject
+    -o smtpd_data_restrictions=reject_unauth_pipelining
+    -o smtpd_end_of_data_restrictions=
+    -o smtpd_restriction_classes=
+    -o mynetworks=127.0.0.0/8
+    -o smtpd_error_sleep_time=0
+    -o smtpd_soft_error_limit=1001
+    -o smtpd_hard_error_limit=1000
+    -o smtpd_client_connection_count_limit=0
+    -o smtpd_client_connection_rate_limit=0
+    -o receive_override_options=no_header_body_checks,no_unknown_recipient_checks,no_milters
+    -o local_header_rewrite_clients=
+EOF
+else
+	message "Postfix service for amavisd-new already exists."
+fi
+
+if [[ -z $(grep amavis $postfix_base/main.cf) ]]; then
+	heading "Setting global content filter for amavisd-new in Postfix..."
+	sudo postconf -e "content_filter=amavisfeed:[127.0.0.1]:10024"
+else
+	message "Global content filter in Postfix already set."
+fi
+
 # Configure Postfix to use LDAP maps
 if [[ ! -a $postfix_base/postfix-ldap-aliases.cf ]]; then
 	heading "Configuring Postfix to use LDAP maps for alias lookup..."
