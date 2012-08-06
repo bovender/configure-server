@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# TODO:
-# readme: dovecot-postfix does almost everything; need to specify passdb
-# and userdb for ldap use, this will automatically make postfix use sasl
-# with ldap as well
-
 # #######################################################################
 # Configure-server.sh
 # Script to configure a Ubuntu server.
@@ -187,7 +182,7 @@ generate_cert() {
 		crl_dir                = \$dir/crl
 		database               = \$dir/index.txt
 		new_certs_dir          = \$dir/newcerts
-		certificate            = \$dir/$ca_name.crt
+		certificate            = \$certs/$ca_name.pem
 		private_key            = \$dir/private/$ca_name.key
 		serial                 = \$dir/serial
 		crlnumber              = \$dir/crlnumber 
@@ -249,19 +244,20 @@ generate_cert() {
 		[ crl_ext ]
 		authorityKeyIdentifier = keyid:always
 		EOF
-	openssl req -config "$0.openssl" -new -nodes -keyout "$1.key" -out "$1.csr" 
-	if [[ -a "$1.csr" ]]; then
-		echo "*** Certificate: $1.pem"
-		openssl ca  -config "$0.openssl" -batch -in "$1.csr" -out "$1.pem" 
-		rm "$0.openssl" "$1.csr"
-		chmod 444 "$1.pem"
-		chmod 400 "$1.key"
-		rsync -v "$1.pem" "$1.key" $user@$server_fqdn:
+	local filename=`echo $1 | sed "s/^\*\./wildcard./"`
+	openssl req -config "$0.openssl" -new -nodes \
+		-keyout "$filename.key" -out "$filename.csr" 
+	if [[ -a "$filename.csr" ]]; then
+		openssl ca  -config "$0.openssl" -batch -in "$filename.csr" -out "$filename.pem" 
+		rm "$0.openssl" "$filename.csr"
+		chmod 444 "$filename.pem"
+		chmod 400 "$filename.key"
+		rsync -v "$filename.pem" "$filename.key" $user@$server_fqdn:
 	else
 		message "Failed to generate certificate signing request for $1."
 		exit 3
 	fi
-	rm -f "$1.key" "$1.pem" 2>&1 >/dev/null
+	rm -f "$filename.key" "$filename.pem" 2>&1 >/dev/null
 }
 
 
@@ -281,31 +277,32 @@ heading "This will configure the Ubuntu server. ***"
 # Find out about the current environment
 # ########################################################################
 
-# Use virt-what to determine if we are running in a virtual machine.
-install virt-what
+# if this is the server, the script should be executed in an SSH
+# if no SSH is found, try to find out if is a server running in
+# a VirtualBox. 
+if [ -z "$SSH_CLIENT" ]; then
+	# Use virt-what to determine if we are running in a virtual machine.
+	install virt-what
 
-heading "Requesting sudo password to find out about virtual environment..."
-vm=`sudo virt-what`
-if [ "$vm" == 'virtualbox' ]; then
-	heading "Running in a VirtualBox VM."
-	if [ ! -d /opt/VBoxGuestAdditions* ]; then
-		heading "Installing guest additions... (please have CD virtually inserted)"
-		sudo mount /dev/sr0 /media/cdrom
-		if [ $? -eq 0 ]; then
-			install dkms build-essential
-			sudo /media/cdrom/VBoxLinuxAdditions.run
+	heading "Requesting sudo password to find out about virtual environment..."
+	vm=`sudo virt-what`
+	if [ "$vm" == 'virtualbox' ]; then
+		heading "Running in a VirtualBox VM."
+		if [ ! -d /opt/VBoxGuestAdditions* ]; then
+			heading "Installing guest additions... (please have CD virtually inserted)"
+			sudo mount /dev/sr0 /media/cdrom
+			if [ $? -eq 0 ]; then
+				install dkms build-essential
+				sudo /media/cdrom/VBoxLinuxAdditions.run
+			else
+				heading "Could not mount guest additions cd -- exiting..."
+				exit 1
+			fi
 		else
-			heading "Could not mount guest additions cd -- exiting..."
-			exit 1
+			heading "VirtualBox guest additions are installed."
 		fi
-	else
-		heading "VirtualBox guest additions are installed."
-	fi
-else # not running in a Virtual Box
-	# if this is the server, the script should be executed in an SSH
-	# if no SSH is found, assume that this is the remote desktop computer
-	# (assuming 
-	if [ -z "$SSH_CLIENT" ]; then
+	else # not running in a Virtual Box
+		
 		heading "You appear to be on a remote desktop computer."
 		echo "Configured remote: $bold$user@$server_fqdn$normal"
 		yesno "Synchronize the script with the one on the server?" answer y
@@ -322,7 +319,9 @@ else # not running in a Virtual Box
 				if [[ -d "$ca_dir" ]]; then
 					yesno "Generate SSL certificates and copy them to server?" answer y
 					if (( $? )); then 
-					 	generate_cert $server_fqdn
+						generate_cert *.$domain.$tld
+						generate_cert $domain.$tld
+						rsync $ca_dir/certs/$ca_name.pem $user@$server_fqdn:.
 					fi
 				fi
 				yesno "Log into secure shell?" answer y
@@ -340,9 +339,9 @@ else # not running in a Virtual Box
 			echo "Bye."
 		fi
 		exit
-	else
-		heading "Running in a secure shell on the server."
 	fi
+else
+	message "Running in a secure shell on the server."
 fi
 
 
@@ -352,6 +351,17 @@ fi
 # server. (The above parts of the script should make sure this is the
 # case.)
 # #####################################################################
+
+# Look for SSL certificates in the current directory; if there are
+# any, assume that the 'desktop' part of the script copied them here,
+# and move them to the appropriate directory.
+if [[ $(find . -name '*.pem') ]]; then
+	heading "Detected SSL certificates -- moving them to /etc/ssl/certs..."
+	sudo mv *.pem /etc/ssl/certs
+	sudo chown root:root *.key
+	sudo chmod 0400 *.key
+	sudo mv *.key /etc/ssl/private
+fi
 
 # Install required packages
 install dovecot-postfix dovecot-ldap postfix-ldap 
@@ -876,6 +886,22 @@ if [[ -z $(id $vmailuser) ]]; then
 	sudo chmod -R 750 $vmailhome
 else
 	heading "User $vmailuser already exists."
+fi
+
+# Configure SSL/TLS for the mail suite
+# dovecot-postfix already did some work for us, so that we only need to
+# adjust symlinks.
+heading "Updating SSL certificate paths..."
+if [[ "$server_fqdn"=="$domain.$tld" ]]; then
+	sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/ssl-mail.pem
+	sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/ssl-mail.key
+	sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/dovecot.pem
+	sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/dovecot.pem
+else
+	sudo ln -sf /etc/ssl/certs/wildcard.$domain.$tld.pem   /etc/ssl/certs/ssl-mail.pem
+	sudo ln -sf /etc/ssl/private/wildcard.$domain.$tld.key /etc/ssl/private/ssl-mail.key
+	sudo ln -sf /etc/ssl/certs/wildcard.$domain.$tld.pem   /etc/ssl/certs/dovecot.pem
+	sudo ln -sf /etc/ssl/private/wildcard.$domain.$tld.key /etc/ssl/private/dovecot.pem
 fi
 
 # Lastly, restart Postfix and Dovecot
