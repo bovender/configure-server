@@ -31,6 +31,22 @@ pw=pass
 vmailuser=vmail
 vmailhome=/var/$vmailuser
 
+# SSL certificate handling $ca_dir is the path to your own certificate
+# authority. By default this is /media/CA/ca, meaning that your CA key is on a
+# drive labeled "CA" (e.g., a USB stick). If your certificates are signed by a
+# commercial CA, you may leave this empty. The script will auto-detect if the
+# USB drive is mounted and offer to generate fresh certificates for the
+# services that it will configure (Mail, LDAP, Apache virtual hosts, OwnCloud).
+ca_dir=/media/CA/ca
+ca_name=ca
+cert_days=1825
+cert_country=DE
+cert_city=Wuerzburg
+cert_state=Bavaria
+cert_org=bovender
+cert_ou="Certificate authority"
+cert_company=bovender
+
 # Postfix configuration directories
 postfix_base=/etc/postfix
 postfix_main=$postfix_base/main.cf
@@ -134,6 +150,120 @@ install() {
 	fi
 }
 
+# Generates an SSL certificate
+# Parameters:
+# $1 - common name (e.g., virtual.domain.tld)
+# $2 - certificate type (e.g., "server" or "e-mail"
+generate_cert() {
+	heading "Generating and signing SSL certificate for $1 ..."
+
+	# Check if the CA directory structure has been initialized
+	if [[ ! -a $ca_dir/index.txt ]]; then
+		message "Generating CA directory structure..."
+		pushd $ca_dir
+		touch index.txt
+		# Make directories if they do not exist yet (note: we assume
+		# that a 'private' directory is present, which should contain
+		# the CA's private key already)
+		mkdir -p newcerts crl certs
+		popd
+	fi
+	if [[ ! -a $ca_dir/serial ]]; then
+		echo "01" > $ca_dir/serial
+	fi
+
+	# Generate a configuration file for OpenSSL
+	local cert_type="server, email"; [[ "$2" ]] && local cert_type="$2"
+	tee "$0.openssl" >/dev/null <<-EOF
+		HOME   = .
+		RANDFILE  = \$ENV::HOME/.rnd
+
+		[ ca ]
+		default_ca = CA_default  # The default ca section
+
+		[ CA_default ]
+		dir                    = $ca_dir
+		certs                  = \$dir/certs
+		crl_dir                = \$dir/crl
+		database               = \$dir/index.txt
+		new_certs_dir          = \$dir/newcerts
+		certificate            = \$dir/$ca_name.crt
+		private_key            = \$dir/private/$ca_name.key
+		serial                 = \$dir/serial
+		crlnumber              = \$dir/crlnumber 
+		crl                    = \$dir/crl.pem  
+		RANDFILE               = \$dir/private/.rand # private random number file
+		x509_extensions        = usr_cert  # The extentions to add to the cert
+		name_opt               = ca_default  # Subject Name options
+		cert_opt               = ca_default  # Certificate field options
+		default_days           = $cert_days
+		default_crl_days       = 30
+		default_md             = default
+		preserve               = no	
+		policy                 = policy_anything
+		unique_subject         = no
+
+		[ policy_anything ]
+		countryName            = optional
+		stateOrProvinceName    = optional
+		localityName           = optional
+		organizationName       = optional
+		organizationalUnitName = optional
+		commonName             = supplied
+		emailAddress           = optional
+
+		[ req ]
+		prompt                 = no
+		default_bits           = 1024
+		default_keyfile        = privkey.pem
+		distinguished_name     = req_distinguished_name
+		x509_extensions        = v3_ca # The extentions to add to the self signed cert
+		string_mask            = utf8only
+
+		[ req_distinguished_name ]
+		countryName            = $cert_country
+		stateOrProvinceName    = $cert_state
+		localityName           = $cert_city
+		0.organizationName     = $cert_org
+		organizationalUnitName = $cert_ou
+		commonName             = $1
+		emailAddress           = ca@$server_fqdn
+
+		[ usr_cert ]
+		basicConstraints=CA:FALSE
+		nsCertType             = $cert_type
+		# This will be displayed in Netscape's comment listbox.
+		nsComment              = "OpenSSL Generated Certificate"
+		subjectKeyIdentifier   = hash
+		authorityKeyIdentifier = keyid,issuer
+
+		[ v3_req ]
+		basicConstraints       = CA:FALSE
+		keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+
+		[ v3_ca ]
+		subjectKeyIdentifier   = hash
+		authorityKeyIdentifier = keyid:always,issuer
+		basicConstraints       = CA:true
+
+		[ crl_ext ]
+		authorityKeyIdentifier = keyid:always
+		EOF
+	openssl req -config "$0.openssl" -new -nodes -keyout "$1.key" -out "$1.csr" 
+	if [[ -a "$1.csr" ]]; then
+		echo "*** Certificate: $1.pem"
+		openssl ca  -config "$0.openssl" -batch -in "$1.csr" -out "$1.pem" 
+		rm "$0.openssl" "$1.csr"
+		chmod 444 "$1.pem"
+		chmod 400 "$1.key"
+		rsync -v "$1.pem" "$1.key" $user@$server_fqdn:
+	else
+		message "Failed to generate certificate signing request for $1."
+		exit 3
+	fi
+	rm -f "$1.key" "$1.pem" 2>&1 >/dev/null
+}
+
 
 # #######################################################################
 # Begin configuration
@@ -189,6 +319,12 @@ else # not running in a Virtual Box
 			fi
 			rsync -vuza $user@$server_fqdn:$(basename $0) .
 			if (( $?==0 )); then
+				if [[ -d "$ca_dir" ]]; then
+					yesno "Generate SSL certificates and copy them to server?" answer y
+					if (( $? )); then 
+					 	generate_cert $server_fqdn
+					fi
+				fi
 				yesno "Log into secure shell?" answer y
 				if (( $? )); then
 					heading "Logging into server's secure shell..."
@@ -209,16 +345,6 @@ else # not running in a Virtual Box
 	fi
 fi
 
-# From here on, we can be pretty sure to be on the server.
-# Install required packages
-install dovecot-postfix dovecot-ldap postfix-ldap 
-install pwgen slapd ldap-utils bsd-mailx
-install spamassassin clamav amavisd-new phpmyadmin php-pear
-
-# Internal passwords for LDAP access
-postfix_ldap_pw=$(pwgen -cns 16 1)
-dovecot_ldap_pw=$(pwgen -cns 16 1)
-
 
 # #####################################################################
 # Now let's configure the server. 
@@ -226,6 +352,16 @@ dovecot_ldap_pw=$(pwgen -cns 16 1)
 # server. (The above parts of the script should make sure this is the
 # case.)
 # #####################################################################
+
+# Install required packages
+install dovecot-postfix dovecot-ldap postfix-ldap 
+install pwgen slapd ldap-utils bsd-mailx
+install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
+
+# Internal passwords for LDAP access
+postfix_ldap_pw=$(pwgen -cns 16 1)
+dovecot_ldap_pw=$(pwgen -cns 16 1)
+
 
 # Prevent Grub from waiting indefinitely for user input on a headless server.
 
@@ -521,6 +657,35 @@ if [[ -z $(grep amavis $postfix_base/main.cf) ]]; then
 	sudo postconf -e "content_filter=amavisfeed:[127.0.0.1]:10024"
 else
 	message "Global content filter in Postfix already set."
+fi
+
+if [[ -z $(groups clamav | grep amavis) ]]; then
+	heading "Adding clamav user to amavis group..."
+	sudo adduser clamav amavis
+else
+	message "clamav is a member of the amavis group already."
+fi
+
+if [[ ! -a /etc/amavis/conf.d/99-custom ]]; then
+	heading "Adding custom configuration for amavisd-new..."
+	sudo tee /etc/amavis/conf.d/99-custom >/dev/null <<'EOF'
+use strict;
+
+@bypass_virus_checks_maps = (
+   \%bypass_virus_checks, \@bypass_virus_checks_acl, \$bypass_virus_checks_re);
+
+@bypass_spam_checks_maps = (
+   \%bypass_spam_checks, \@bypass_spam_checks_acl, \$bypass_spam_checks_re);
+
+# Always add spam info header
+$sa_tag_level_deflt  = undef;
+$sa_tag2_level_deflt = 5;
+$sa_kill_level_deflt = 20;
+
+1;  # ensure a defined return
+EOF
+else
+	message "Custom configuration for amavisd-new already exists."
 fi
 
 # Configure Postfix to use LDAP maps
