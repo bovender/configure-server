@@ -204,6 +204,17 @@ set up as local delivery agent, Postfix will *never* consult
 [dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
 
 
+### Horde Webmail ###
+
+Horde Webmail Edition is installed and configured with a subdomain.
+The subdomain's default name is 'horde' and can be customized in the
+`$horde_subdomain` variable.
+
+Horde is installed into `/var/horde`. The installation script will ask
+you for the connection parameters for the MySQL server, so you should
+have these at hand when running the script.
+
+
 Setting up a Ubuntu Server VM
 -----------------------------
 
