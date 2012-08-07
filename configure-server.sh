@@ -62,6 +62,15 @@ dovecotDN="cn=dovecot,$ldapauthDN"
 postfixDN="cn=postfix,$ldapauthDN"
 pwhash="{SSHA}"
 
+# Horde parameters
+horde_dir=/var/horde
+horde_subdomain=horde
+horde_database=horde
+
+# MySQL parameters
+mysqlroot=root
+
+
 # Internal ('work') variables
 homepage="http://github.com/bovender/configure-server"
 msgstr="*** "
@@ -321,13 +330,21 @@ if [ -z "$SSH_CLIENT" ]; then
 					if (( $? )); then 
 						generate_cert *.$domain.$tld
 						generate_cert $domain.$tld
+						if [[ ! $domain.$tld==$server_fqdn ]]; then
+							generate_cert $server_fqdn
+						fi
+						if [[ -n $horde_subdomain ]]; then
+							generate_cert $horde_subdomain.$server_fqdn
+						fi
 						rsync $ca_dir/certs/$ca_name.pem $user@$server_fqdn:.
 					fi
 				fi
 				yesno "Log into secure shell?" answer y
 				if (( $? )); then
 					heading "Logging into server's secure shell..."
-					exec ssh $user@$server_fqdn
+					ssh $user@$server_fqdn
+					message "Returned from SSH session."
+					exit 
 				else
 					message "Bye."
 				fi
@@ -905,10 +922,12 @@ else
 fi
 
 # Lastly, restart Postfix and Dovecot
+if (( restart_postfix+restart_dovecot )); then 
+	heading "Restarting services..."
+fi
 if (( restart_postfix )); then sudo service postfix restart; fi
 if (( restart_dovecot )); then sudo service dovecot restart; fi
 
-exit 99
 
 # ######################
 # PHPmyadmin
@@ -924,30 +943,37 @@ fi
 # Horde configuration
 # ######################
 
-if [[ ! -d /var/horde ]]; then
+if [[ ! -d $horde_dir ]]; then
 	heading "Installing Horde..."
 	sudo pear channel-discover pear.horde.org
 	sudo pear install horde/horde_role
 	sudo pear run-scripts horde/horde_role
 	sudo pear install horde/webmail
-	webmail-install
+	mysql -u$mysqlroot -p -e "create database $horde_database;"
+	sudo webmail-install
+	sudo chown www-mail:www-mail $horde_dir
 else
 	heading "Horde already installed."
 fi
 
 if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	heading "Configuring horde subdomain for apache..."
+	if [[ -n $horde_subdomain ]]; then
+		local certname=$horde_subdomain.$server_fqdn
+	else
+		local certname=$server_fqdn
+	fi
 	sudo tee /etc/apache2/sites-available/horde > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
 	ServerAdmin webmaster@$server_fqdn
-	ServerName horde.$server_fqdn
-	DocumentRoot /var/horde
+	ServerName $horde_subdomain.$server_fqdn
+	DocumentRoot $horde_dir
 	<Directory />
 		Options FollowSymLinks
 		AllowOverride None
 	</Directory>
-	<Directory /var/horde>
+	<Directory $horde_dir>
 		AllowOverride None
 		Order allow,deny
 		allow from all
@@ -962,8 +988,8 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	CustomLog ${APACHE_LOG_DIR}/ssl_access.log combined
 
 	SSLEngine on
-	SSLCertificateFile    /etc/ssl/certs/ssl-cert-snakeoil.pem
-	SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
+	SSLCertificateFile    /etc/ssl/certs/wildcard.$domain.$tld.pem
+	SSLCertificateKeyFile /etc/ssl/private/wildcard.$domain.$tld.key
 
 	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
 	<FilesMatch "\.(cgi|shtml|phtml|php)$">
@@ -983,7 +1009,8 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 </IfModule>
 EOF
 	sudo a2ensite horde
-	sudo service apache2 reload
+	sudo a2enmod ssl rewrite
+	sudo service apache2 restart
 else
 	heading "Horde subdomain for apache already configured."
 fi
