@@ -384,6 +384,7 @@ fi
 install dovecot-postfix dovecot-ldap postfix-ldap 
 install pwgen slapd ldap-utils bsd-mailx
 install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
+install php5-memcache memcached php-apc
 
 # Internal passwords for LDAP access
 postfix_ldap_pw=$(pwgen -cns 16 1)
