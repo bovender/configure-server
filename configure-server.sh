@@ -60,16 +60,16 @@ adminDN="cn=admin,$ldapbaseDN"
 # hard-coded elsewhere (namely, in the 'cn: ...' directives of LDIF)
 dovecotDN="cn=dovecot,$ldapauthDN"
 postfixDN="cn=postfix,$ldapauthDN"
+hordeDN="cn=horde,$ldapauthDN"
 pwhash="{SSHA}"
+
+# MySQL
+mysqladmin=root
 
 # Horde parameters
 horde_dir=/var/horde
 horde_subdomain=horde
 horde_database=horde
-
-# MySQL parameters
-mysqlroot=root
-
 
 # Internal ('work') variables
 homepage="http://github.com/bovender/configure-server"
@@ -384,12 +384,21 @@ fi
 install dovecot-postfix dovecot-ldap postfix-ldap 
 install pwgen slapd ldap-utils bsd-mailx
 install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
-install php5-memcache memcached php-apc
+install php5-ldap php5-memcache memcached php-apc
 
 # Internal passwords for LDAP access
 postfix_ldap_pw=$(pwgen -cns 16 1)
 dovecot_ldap_pw=$(pwgen -cns 16 1)
+horde_ldap_pw=$(pwgen -cns 16 1)
 
+# Configure SSH
+if [[ -n $(grep -i '^AllowUsers $user' /etc/ssh/sshd_config) ]]; then
+	heading "Configuring SSH to allow only $user to log in."
+	sudo sed -i '/^AllowUsers/ d; s/^(PermitRootLogin.*).*$/\1no' /etc/ssh/sshd_config
+	sudo tee -a /etc/ssh/sshd_config >/dev/null <<-EOF
+		AllowUsers $user
+		EOF
+fi
 
 # Prevent Grub from waiting indefinitely for user input on a headless server.
 
@@ -478,6 +487,8 @@ delete: olcAccess
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
 add: olcAccess
+olcAccess: to dn.children=$ldapusersDN 
+ by dn=$hordeDN manage break
 # Passwords may only be accessed for authentication, or modified by the 
 # correponsing users and admin.
 olcAccess: to attrs=userPassword 
@@ -500,6 +511,11 @@ olcAccess: to *
  by self write 
  by users read 
  by * none
+
+dn: olcDatabase={1}hdb,cn=config
+changetype: modify
+add: olcDbIndex
+olcDbIndex: uid pres
 EOF
 else
 	message "LDAP ACLs already configured..."
@@ -604,6 +620,9 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	dn: $dovecotDN
 	changetype: delete
 
+	dn: $hordeDN
+	changetype: delete
+
 	# ldapadd will complain if $ldapauth exists already, but we don't care
 	# as we do not need to update it, we just need to make sure it's there
 	dn: $ldapauthDN
@@ -611,7 +630,7 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	ou: auth
 	objectClass: organizationalUnit
 
-	# Add updated entries for Postfix and Dovecot
+	# Add updated entries for Postfix, Dovecot, and Horde
 	dn: $postfixDN
 	changetype: add
 	objectClass: organizationalRole
@@ -627,9 +646,18 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	cn: dovecot
 	userPassword:
 	description: Dovecot proxy user
+	
+	dn: $hordeDN
+	changetype: add
+	objectClass: organizationalRole
+	objectClass: simpleSecurityObject
+	cn: horde
+	userPassword:
+	description: Horde proxy user
 	EOF
 ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$postfix_ldap_pw" "$postfixDN"
 ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$dovecot_ldap_pw" "$dovecotDN"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$horde_ldap_pw"   "$hordeDN"
 
 
 # ######################################################################
@@ -950,12 +978,56 @@ if [[ ! -d $horde_dir ]]; then
 	sudo pear install horde/horde_role
 	sudo pear run-scripts horde/horde_role
 	sudo pear install horde/webmail
-	mysql -u$mysqlroot -p -e "create database $horde_database;"
+	sudo pear install horde/horde_ldap
+	mysql -u$mysqladmin -p -e "create database $horde_database;"
 	sudo webmail-install
 	sudo chown www-mail:www-mail $horde_dir
 else
 	heading "Horde already installed."
 fi
+
+# Adjust horde configuration
+heading "Adjusting horde configuration..."
+# sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_ldap_pw';/" $horde_dir/config/conf.php
+read -sp "Please enter the MySQL password for $mysqladmin: " mysql_admin_pw
+sudo tee $horde_dir/config/conf.local.php >/dev/null <<-EOF
+	<?php
+	\$conf['sql']['username'] = '$mysqladmin';
+	\$conf['sql']['password'] = '$mysql_admin_pw';
+	\$conf['sql']['protocol'] = 'unix';
+	\$conf['sql']['database'] = 'horde';
+	\$conf['sql']['charset'] = 'utf-8';
+	\$conf['sql']['ssl'] = true;
+	\$conf['sql']['splitread'] = false;
+	\$conf['sql']['phptype'] = 'mysqli';
+	\$conf['ldap']['hostspec'] = 'localhost';
+	\$conf['ldap']['tls'] = false;
+	\$conf['ldap']['version'] = 3;
+	\$conf['ldap']['binddn'] = '$hordeDN';
+	\$conf['ldap']['bindpw'] = '$horde_ldap_pw';
+	\$conf['ldap']['bindas'] = 'admin';
+	\$conf['ldap']['useldap'] = true;
+	\$conf['auth']['admins'] = array('$user');
+	\$conf['auth']['params']['basedn'] = '$ldapusersDN';
+	\$conf['auth']['params']['scope'] = 'sub';
+	\$conf['auth']['params']['ad'] = false;
+	\$conf['auth']['params']['uid'] = 'uid';
+	\$conf['auth']['params']['encryption'] = 'ssha';
+	\$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson', 'CourierMailAccount', 'CourierMailAlias');
+	\$conf['auth']['params']['filter'] = '(objectclass=CourierMailAccount)';
+	\$conf['auth']['params']['password_expiration'] = 'no';
+	\$conf['auth']['params']['driverconfig'] = 'horde';
+	\$conf['auth']['driver'] = 'ldap';
+	\$conf['signup']['params']['driverconfig'] = 'horde';
+	\$conf['signup']['driver'] = 'Sql';
+	\$conf['signup']['approve'] = true;
+	\$conf['signup']['allow'] = false;
+	\$conf['problems']['email'] = 'webmaster@$server_fqdn';
+	\$conf['problems']['maildomain'] = '$server_fqdn';
+	\$conf['problems']['tickets'] = false;
+	\$conf['problems']['attachments'] = true;
+	\$conf['memcache']['enabled'] = true;
+	EOF
 
 if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	heading "Configuring horde subdomain for apache..."
