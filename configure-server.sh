@@ -158,8 +158,8 @@ install() {
 sync_script() {
 	rsync -vuza $0 $user@$server_fqdn:.
 	code=$?
-	if (( code )); then
-		rsync -vuza $user@$server_fqdn:. $0 
+	if (( code==0 )); then
+		rsync -vuza $user@$server_fqdn:$(basename $0) .
 		code=$?
 	fi
 	return $code
