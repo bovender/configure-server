@@ -1034,10 +1034,35 @@ fi
 heading "Adjusting horde configuration..."
 # sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_ldap_pw';/" $horde_dir/config/conf.php
 read -sp "Please enter the MySQL password for $mysqladmin: " mysql_admin_pw
-sudo tee $horde_dir/config/conf.local.php >/dev/null <<-EOF
+
+# Extract the local horde's secret key
+horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' /$horde_dir/config/conf.php`
+
+sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	<?php
-	\$conf['sql']['username'] = '$mysqladmin';
-	\$conf['sql']['password'] = '$mysql_admin_pw';
+	/* CONFIG START. DO NOT CHANGE ANYTHING IN OR AFTER THIS LINE. */
+	// $Id: 7132f71317ff8b99212d581514435cc9765c7a9e $
+	\$conf['vhosts'] = false;
+	\$conf['debug_level'] = E_ALL & ~E_NOTICE;
+	\$conf['max_exec_time'] = 0;
+	\$conf['compress_pages'] = true;
+	\$conf['secret_key'] = '$horde_secret_key';
+	\$conf['umask'] = 077;
+	\$conf['testdisable'] = true;
+	\$conf['use_ssl'] = 2;
+	\$conf['server']['name'] = $_SERVER['SERVER_NAME'];
+	\$conf['urls']['token_lifetime'] = 30;
+	\$conf['urls']['hmac_lifetime'] = 30;
+	\$conf['urls']['pretty'] = false;
+	\$conf['safe_ips'] = array();
+	\$conf['session']['name'] = 'Horde';
+	\$conf['session']['use_only_cookies'] = true;
+	\$conf['session']['cache_limiter'] = 'nocache';
+	\$conf['session']['timeout'] = 0;
+	\$conf['cookie']['domain'] = $_SERVER['SERVER_NAME'];
+	\$conf['cookie']['path'] = '/';
+	\$conf['sql']['username'] = 'root';
+	\$conf['sql']['password'] = '$mysqladmin';
 	\$conf['sql']['protocol'] = 'unix';
 	\$conf['sql']['database'] = 'horde';
 	\$conf['sql']['charset'] = 'utf-8';
@@ -1052,6 +1077,12 @@ sudo tee $horde_dir/config/conf.local.php >/dev/null <<-EOF
 	\$conf['ldap']['bindas'] = 'admin';
 	\$conf['ldap']['useldap'] = true;
 	\$conf['auth']['admins'] = array('$user');
+	\$conf['auth']['checkip'] = true;
+	\$conf['auth']['checkbrowser'] = true;
+	\$conf['auth']['resetpassword'] = true;
+	\$conf['auth']['alternate_login'] = false;
+	\$conf['auth']['redirect_on_logout'] = false;
+	\$conf['auth']['list_users'] = 'list';
 	\$conf['auth']['params']['basedn'] = '$ldapusersDN';
 	\$conf['auth']['params']['scope'] = 'sub';
 	\$conf['auth']['params']['ad'] = false;
@@ -1062,29 +1093,128 @@ sudo tee $horde_dir/config/conf.local.php >/dev/null <<-EOF
 	\$conf['auth']['params']['password_expiration'] = 'no';
 	\$conf['auth']['params']['driverconfig'] = 'horde';
 	\$conf['auth']['driver'] = 'ldap';
+	\$conf['auth']['params']['count_bad_logins'] = false;
+	\$conf['auth']['params']['login_block'] = false;
+	\$conf['auth']['params']['login_block_count'] = 5;
+	\$conf['auth']['params']['login_block_time'] = 5;
 	\$conf['signup']['params']['driverconfig'] = 'horde';
 	\$conf['signup']['driver'] = 'Sql';
 	\$conf['signup']['approve'] = true;
-	\$conf['signup']['allow'] = false;
+	\$conf['signup']['allow'] = true;
+	\$conf['log']['priority'] = 'WARNING';
+	\$conf['log']['ident'] = 'HORDE';
+	\$conf['log']['name'] = LOG_USER;
+	\$conf['log']['type'] = 'syslog';
+	\$conf['log']['enabled'] = true;
+	\$conf['log_accesskeys'] = false;
+	\$conf['prefs']['params']['driverconfig'] = 'horde';
+	\$conf['prefs']['driver'] = 'Sql';
+	\$conf['alarms']['params']['driverconfig'] = 'horde';
+	\$conf['alarms']['params']['ttl'] = 300;
+	\$conf['alarms']['driver'] = 'Sql';
+	\$conf['datatree']['driver'] = 'null';
+	\$conf['group']['driverconfig'] = 'horde';
+	\$conf['group']['driver'] = 'Sql';
+	\$conf['perms']['driverconfig'] = 'horde';
+	\$conf['perms']['driver'] = 'Sql';
+	\$conf['share']['no_sharing'] = false;
+	\$conf['share']['auto_create'] = true;
+	\$conf['share']['world'] = true;
+	\$conf['share']['any_group'] = false;
+	\$conf['share']['hidden'] = false;
+	\$conf['share']['cache'] = false;
+	\$conf['share']['driver'] = 'Sqlng';
+	\$conf['cache']['default_lifetime'] = 86400;
+	\$conf['cache']['params']['sub'] = 0;
+	\$conf['cache']['driver'] = 'File';
+	\$conf['cache']['compress'] = true;
+	\$conf['cache']['use_memorycache'] = '';
+	\$conf['cachecssparams']['driver'] = 'filesystem';
+	\$conf['cachecssparams']['lifetime'] = 86400;
+	\$conf['cachecssparams']['compress'] = 'php';
+	\$conf['cachecss'] = true;
+	\$conf['cachejsparams']['driver'] = 'filesystem';
+	\$conf['cachejsparams']['compress'] = 'php';
+	\$conf['cachejsparams']['lifetime'] = 86400;
+	\$conf['cachejs'] = true;
+	\$conf['cachethemesparams']['check'] = 'appversion';
+	\$conf['cachethemesparams']['lifetime'] = 604800;
+	\$conf['cachethemes'] = true;
+	\$conf['lock']['params']['driverconfig'] = 'horde';
+	\$conf['lock']['driver'] = 'Sql';
+	\$conf['token']['params']['driverconfig'] = 'horde';
+	\$conf['token']['driver'] = 'Sql';
+	\$conf['mailer']['params']['auth'] = false;
+	\$conf['mailer']['type'] = 'smtp';
+	\$conf['mailformat']['brokenrfc2231'] = false;
+	\$conf['vfs']['params']['driverconfig'] = 'horde';
+	\$conf['vfs']['type'] = 'Sql';
+	\$conf['sessionhandler']['type'] = 'Builtin';
+	\$conf['sessionhandler']['memcache'] = false;
+	\$conf['spell']['params']['path'] = '/usr/bin/aspell';
+	\$conf['spell']['driver'] = 'aspell';
+	\$conf['gnupg']['keyserver'] = array('pool.sks-keyservers.net');
+	\$conf['gnupg']['timeout'] = 10;
+	\$conf['openssl']['cafile'] = '/etc/ssl/certs';
+	\$conf['openssl']['path'] = '/usr/bin/openssl';
+	\$conf['nobase64_img'] = false;
+	\$conf['image']['driver'] = 'Imagick';
+	\$conf['exif']['params']['exiftool'] = '/usr/bin/exiftool';
+	\$conf['exif']['driver'] = 'Exiftool';
 	\$conf['problems']['email'] = 'webmaster@$server_fqdn';
 	\$conf['problems']['maildomain'] = '$server_fqdn';
 	\$conf['problems']['tickets'] = false;
 	\$conf['problems']['attachments'] = true;
+	\$conf['menu']['apps'] = array();
+	\$conf['menu']['always'] = false;
+	\$conf['menu']['links']['help'] = 'all';
+	\$conf['menu']['links']['prefs'] = 'authenticated';
+	\$conf['menu']['links']['problem'] = 'all';
+	\$conf['menu']['links']['login'] = 'all';
+	\$conf['menu']['links']['logout'] = 'authenticated';
+	\$conf['portal']['fixed_blocks'] = array();
+	\$conf['accounts']['params']['basedn'] = '$ldapusersDN';
+	\$conf['accounts']['params']['scope'] = 'sub';
+	\$conf['accounts']['params']['attr'] = 'uid';
+	\$conf['accounts']['params']['strip'] = true;
+	\$conf['accounts']['params']['driverconfig'] = 'horde';
+	\$conf['accounts']['driver'] = 'ldap';
+	\$conf['user']['verify_from_addr'] = true;
+	\$conf['user']['select_view'] = true;
+	\$conf['facebook']['enabled'] = false;
+	\$conf['twitter']['enabled'] = false;
+	\$conf['urlshortener'] = 'TinyUrl';
+	\$conf['weather']['params']['lifetime'] = 21600;
+	\$conf['weather']['provider'] = 'Google';
+	\$conf['imsp']['enabled'] = false;
+	\$conf['kolab']['enabled'] = false;
+	\$conf['memcache']['hostspec'] = array('localhost');
+	\$conf['memcache']['port'] = array('11211');
+	\$conf['memcache']['weight'] = array();
+	\$conf['memcache']['persistent'] = false;
+	\$conf['memcache']['compression'] = false;
+	\$conf['memcache']['large_items'] = true;
 	\$conf['memcache']['enabled'] = true;
+	\$conf['activesync']['enabled'] = false;
+	/* CONFIG END. DO NOT CHANGE ANYTHING IN OR BEFORE THIS LINE. */
 	EOF
 
 if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	heading "Configuring horde subdomain for apache..."
 	if [[ -n $horde_subdomain ]]; then
-		certname=$horde_subdomain.$server_fqdn
+		horde_fqdn=$horde_subdomain.$server_fqdn
 	else
-		certname=$server_fqdn
+		horde_fqdn=$server_fqdn
 	fi
 	sudo tee /etc/apache2/sites-available/horde > /dev/null <<EOF
 <IfModule mod_ssl.c>
+<VirtualHost *:80>
+	ServerName $horde_fqdn
+	Redirect permanent / https://$horde_fqdn/
+</Virtualhost>
 <VirtualHost *:443>
 	ServerAdmin webmaster@$server_fqdn
-	ServerName $horde_subdomain.$server_fqdn
+	ServerName $horde_fqdn
 	DocumentRoot $horde_dir
 	<Directory />
 		Options FollowSymLinks
@@ -1105,8 +1235,8 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	CustomLog ${APACHE_LOG_DIR}/ssl_access.log combined
 
 	SSLEngine on
-	SSLCertificateFile    /etc/ssl/certs/$certname.pem
-	SSLCertificateKeyFile /etc/ssl/private/$certname.key
+	SSLCertificateFile    /etc/ssl/certs/$horde_fqdn.pem
+	SSLCertificateKeyFile /etc/ssl/private/$horde_fqdn.key
 
 	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
 	<FilesMatch "\.(cgi|shtml|phtml|php)$">
