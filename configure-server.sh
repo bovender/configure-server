@@ -77,6 +77,7 @@ msgstr="*** "
 bold=`tput bold`
 normal=`tput sgr0`
 restart_postfix=0
+ip=$(ip address show dev eth0 | awk '/inet / { print $2 }' | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}')
 
 shopt -s nocasematch
 
@@ -392,7 +393,7 @@ if [[ $(find . -name '*.pem') ]]; then
 fi
 
 # Install required packages
-install dovecot-postfix dovecot-ldap postfix-ldap 
+install dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre
 install pwgen slapd ldap-utils bsd-mailx
 install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
 install php5-ldap php5-memcache memcached php-apc
@@ -612,6 +613,7 @@ then
 		mail: $mail
 		maildrop: root
 		maildrop: postmaster
+		maildrop: webmaster
 		maildrop: abuse
 		# The homeDirectory attribute is required by the schema, but we leave
 		# it empty since we are going to use $vmailhome as the uniform base
@@ -873,6 +875,59 @@ if [[ -z $(grep "local_transport = dovecot" $postfix_base/main.cf) ]]; then
 	restart_postfix=1
 fi
 
+# Require fully qualified HELO -- this requirement (though RFC2821 conformant)
+# may not be met by Outlook and Outlook Express.
+# sudo postconf -e "smtpd_helo_required = yes"
+
+# The following restrictions may be made more tight by adding:
+#	reject_unknown_sender_domain \
+# after 'reject_non_fqdn_sender'. Note however that this will cause all e-mails
+# from your local, non-DNS-registered test domain to be rejected.
+sudo sed -i '/^smtpd_recipient_restrictions/ d' $postfix_base/main.cf
+sudo tee -a $postfix_base/main.cf >/dev/null <<EOF
+smtpd_recipient_restrictions = 
+	reject_non_fqdn_recipient 
+	reject_non_fqdn_sender 
+	reject_unknown_recipient_domain 
+	permit_mynetworks 
+	reject_sender_login_mismatch 
+	reject_unauth_destination 
+	check_recipient_access hash:$postfix_base/roleaccount_exceptions
+	reject_multi_recipient_bounce 
+	reject_non_fqdn_hostname 
+	reject_invalid_hostname 
+	check_helo_access pcre:$postfix_base/helo_checks 
+	check_sender_mx_access cidr:$postfix_base/bogus_mx 
+	permit
+EOF
+
+sudo tee $postfix_base/roleaccount_exceptions >/dev/null <<-EOF
+	postmaster@  OK
+	abuse@       OK
+	hostmaster@  OK
+	webmaster@   OK
+	EOF
+sudo postmap hash:/$postfix_base/roleaccount_exceptions
+
+sudo tee $postfix_base/helo_checks >/dev/null <<-EOF
+	/^$(echo $server_fqdn | sed 's/\./\\./g')\$/    550 Don't use my hostname
+	/^$(echo $ip | sed 's/\./\\./g')\$/             550 Don't use my IP address
+	/^\[$(echo $ip | sed 's/\./\\./g')\]\$/         550 Don't use my IP address
+	EOF
+
+sudo tee $postfix_base/bogus_mx >/dev/null <<-EOF
+	# bogus networks
+	0.0.0.0/8       550 Mail server in broadcast network
+	10.0.0.0/8      550 No route to your RFC 1918 network
+	127.0.0.0/8     550 Mail server in loopback network
+	224.0.0.0/4     550 Mail server in class D multicast network
+	172.16.0.0/12   550 No route to your RFC 1918 network
+	192.168.0.0/16  550 No route to your RFC 1918 network
+	# spam havens
+	69.6.0.0/18     550 REJECT Listed on Register of Known Spam Operations
+	# Wild-card MTA
+	64.94.110.11/32 550 REJECT VeriSign domain wildcard
+	EOF
 
 # #######################################################################
 # Dovecot configuration
