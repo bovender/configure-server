@@ -572,6 +572,20 @@ else
 	message "authldap schema already imported into LDAP."
 fi
 
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+	-b "cn=config" "cn=*olcLog*" dn 2>/dev/null ) ]]
+then
+	heading "Enabling slapd logging..."
+	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
+dn: cn=config
+changetype: modify
+replace: olcLogLevel
+olcLogLevel: conns stats stats2
+EOF
+else
+	message "slapd logging already configured."
+fi
+
 heading "Binding to LDAP directory..."
 echo "For binding to the LDAP directory, please enter the password that you used"
 echo "during installation of this server."
@@ -846,7 +860,7 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 	sudo chmod 640     $postfix_base/postfix-ldap-canonical-map.cf 
 
 	sudo postconf -e "canonical_maps = proxy:ldap:$postfix_base/postfix-ldap-canonical-map.cf"
-	sudo postconf -e "canonical_classes = header_recipients, header_sender, envelope_recipients, envelope_sender"
+	sudo postconf -e "canonical_classes = header_recipient, header_sender, envelope_recipient, envelope_sender"
 	sudo postconf -e "local_header_rewrite_clients = static:all"
 	restart_postfix=1
 fi
