@@ -1119,7 +1119,7 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['umask'] = 077;
 	\$conf['testdisable'] = true;
 	\$conf['use_ssl'] = 2;
-	\$conf['server']['name'] = $_SERVER['SERVER_NAME'];
+	\$conf['server']['name'] = \$_SERVER['SERVER_NAME'];
 	\$conf['urls']['token_lifetime'] = 30;
 	\$conf['urls']['hmac_lifetime'] = 30;
 	\$conf['urls']['pretty'] = false;
@@ -1128,7 +1128,7 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['session']['use_only_cookies'] = true;
 	\$conf['session']['cache_limiter'] = 'nocache';
 	\$conf['session']['timeout'] = 0;
-	\$conf['cookie']['domain'] = $_SERVER['SERVER_NAME'];
+	\$conf['cookie']['domain'] = \$_SERVER['SERVER_NAME'];
 	\$conf['cookie']['path'] = '/';
 	\$conf['sql']['username'] = 'root';
 	\$conf['sql']['password'] = '$mysqladmin';
@@ -1295,13 +1295,13 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 		allow from all
 	</Directory>
 
-	ErrorLog ${APACHE_LOG_DIR}/error.log
+	ErrorLog \${APACHE_LOG_DIR}/error.log
 
 	# Possible values include: debug, info, notice, warn, error, crit,
 	# alert, emerg.
 	LogLevel warn
 
-	CustomLog ${APACHE_LOG_DIR}/ssl_access.log combined
+	CustomLog \${APACHE_LOG_DIR}/ssl_access.log combined
 
 	SSLEngine on
 	SSLCertificateFile    /etc/ssl/certs/$horde_fqdn.pem
