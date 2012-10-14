@@ -1091,7 +1091,7 @@ if [[ ! -d $horde_dir ]]; then
 	sudo pear install horde/horde_role
 	sudo pear run-scripts horde/horde_role
 	sudo pear install horde/webmail
-	sudo pear install horde/horde_ldap
+	sudo pear install horde/Horde_Ldap
 	mysql -u$mysqladmin -p -e "create database $horde_database;"
 	sudo webmail-install
 	sudo chown www-mail:www-mail $horde_dir
@@ -1130,8 +1130,8 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['session']['timeout'] = 0;
 	\$conf['cookie']['domain'] = \$_SERVER['SERVER_NAME'];
 	\$conf['cookie']['path'] = '/';
-	\$conf['sql']['username'] = 'root';
-	\$conf['sql']['password'] = '$mysqladmin';
+	\$conf['sql']['username'] = '$mysqladmin';
+	\$conf['sql']['password'] = '$mysql_admin_pw';
 	\$conf['sql']['protocol'] = 'unix';
 	\$conf['sql']['database'] = 'horde';
 	\$conf['sql']['charset'] = 'utf-8';
