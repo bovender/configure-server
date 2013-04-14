@@ -32,7 +32,7 @@ vmailhome=/var/$vmailuser
 # commercial CA, you may leave this empty. The script will auto-detect if the
 # USB drive is mounted and offer to generate fresh certificates for the
 # services that it will configure (Mail, LDAP, Apache virtual hosts, OwnCloud).
-ca_dir=/media/CA/ca
+ca_dir=/media/daniel/CA/ca
 ca_name=ca
 cert_days=1825
 cert_country=DE
@@ -72,7 +72,7 @@ horde_subdomain=horde
 horde_database=horde
 
 # Internal ('work') variables
-homepage="http://github.com/bovender/configure-server"
+homepage="https://github.com/bovender/configure-server"
 msgstr="*** "
 bold=`tput bold`
 normal=`tput sgr0`
@@ -736,7 +736,7 @@ else
 	message "Postfix service for amavisd-new already exists."
 fi
 
-if [[ -z $(grep amavis $postfix_base/main.cf) ]]; then
+if [[ -z $(grep amavis $postfix_main) ]]; then
 	heading "Setting global content filter for amavisd-new in Postfix..."
 	sudo postconf -e "content_filter=amavisfeed:[127.0.0.1]:10024"
 else
@@ -880,12 +880,12 @@ EOF
 	restart_postfix=1
 fi
 
-if [[ -z $(grep "local_transport = dovecot" $postfix_base/main.cf) ]]; then
+if [[ -z $(grep "local_transport = dovecot" $postfix_main) ]]; then
 	heading "Configuring Postfix' local transport to use dovecot pipe..."
 	sudo postconf -e "dovecot_destination_recipient_limit = 1"
 	sudo postconf -e "local_transport = dovecot"
 	# Comment out the mailbox_command directive:
-	sudo sed -i 's/^mailbox_command/#&/' $postfix_base/main.cf
+	sudo sed -i 's/^mailbox_command/#&/' $postfix_main
 	restart_postfix=1
 fi
 
@@ -897,21 +897,21 @@ fi
 #	reject_unknown_sender_domain \
 # after 'reject_non_fqdn_sender'. Note however that this will cause all e-mails
 # from your local, non-DNS-registered test domain to be rejected.
-sudo sed -i '/^smtpd_recipient_restrictions/ d' $postfix_base/main.cf
-sudo tee -a $postfix_base/main.cf >/dev/null <<EOF
+sudo sed -i '/^smtpd_recipient_restrictions/ d' $postfix_main
+sudo tee -a $postfix_main >/dev/null <<EOF
 smtpd_recipient_restrictions = 
-	reject_non_fqdn_recipient 
-	reject_non_fqdn_sender 
-	reject_unknown_recipient_domain 
-	permit_mynetworks 
-	reject_sender_login_mismatch 
-	reject_unauth_destination 
-	check_recipient_access hash:$postfix_base/roleaccount_exceptions
-	reject_multi_recipient_bounce 
-	reject_non_fqdn_hostname 
-	reject_invalid_hostname 
-	check_helo_access pcre:$postfix_base/helo_checks 
-	check_sender_mx_access cidr:$postfix_base/bogus_mx 
+	reject_non_fqdn_recipient,
+	reject_non_fqdn_sender,
+	reject_unknown_recipient_domain,
+	permit_mynetworks,
+	reject_sender_login_mismatch,
+	reject_unauth_destination,
+	check_recipient_access hash:$postfix_base/roleaccount_exceptions,
+	reject_multi_recipient_bounce,
+	reject_non_fqdn_hostname,
+	reject_invalid_hostname,
+	check_helo_access pcre:$postfix_base/helo_checks,
+	check_sender_mx_access cidr:$postfix_base/bogus_mx,
 	permit
 EOF
 
