@@ -1016,7 +1016,7 @@ EOF
 		# Since Postfix rewrites the envelope recipient to the canonical
 		# mail address (mail attribute in LDAP entry), we need to search
 		# for %Ln in 'mail' also.
-		pass_filter = (&(objectClass=inetOrgPerson)(|(uid=%Ln)(mail=%Ln))
+		pass_filter = (&(objectClass=inetOrgPerson)(|(uid=%Ln)(mail=%Ln)))
 
 		#default_pass_scheme = SSHA
 
