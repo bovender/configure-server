@@ -27,12 +27,12 @@ vmailuser=vmail
 vmailhome=/var/$vmailuser
 
 # SSL certificate handling $ca_dir is the path to your own certificate
-# authority. By default this is /media/CA/ca, meaning that your CA key is on a
+# authority. By default this is /media/{username}/CA/ca, meaning that your CA key is on a
 # drive labeled "CA" (e.g., a USB stick). If your certificates are signed by a
 # commercial CA, you may leave this empty. The script will auto-detect if the
 # USB drive is mounted and offer to generate fresh certificates for the
 # services that it will configure (Mail, LDAP, Apache virtual hosts, OwnCloud).
-ca_dir=/media/daniel/CA/ca
+ca_dir=/media/$USER/CA/ca
 ca_name=ca
 cert_days=1825
 cert_country=DE
@@ -826,7 +826,7 @@ if [[ ! -a $postfix_base/postfix-ldap-local-recipients.cf ]]; then
 		bind_pw = $postfix_ldap_pw
 
 		search_base = $ldapusersDN
-		query_filter = (&(objectClass=CourierMailAlias)(|(uid=%u)(mail=%u)))
+		query_filter = (&(objectClass=CourierMailAlias)(|(uid=%u)(mail=%u)(maildrop=%u)))
 		result_attribute = uid
 		EOF
 	sudo chgrp postfix $postfix_base/postfix-ldap-local-recipients.cf 
@@ -904,7 +904,8 @@ smtpd_recipient_restrictions =
 	reject_non_fqdn_sender,
 	reject_unknown_recipient_domain,
 	permit_mynetworks,
-	reject_sender_login_mismatch,
+#	TODO: Make the following restriction work.
+#	reject_sender_login_mismatch,
 	reject_unauth_destination,
 	check_recipient_access hash:$postfix_base/roleaccount_exceptions,
 	reject_multi_recipient_bounce,
@@ -1197,18 +1198,18 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['cache']['params']['sub'] = 0;
 	\$conf['cache']['driver'] = 'File';
 	\$conf['cache']['compress'] = true;
-	\$conf['cache']['use_memorycache'] = '';
+	\$conf['cache']['use_memorycache'] = 'Memcache';
 	\$conf['cachecssparams']['driver'] = 'filesystem';
 	\$conf['cachecssparams']['lifetime'] = 86400;
 	\$conf['cachecssparams']['compress'] = 'php';
-	\$conf['cachecss'] = true;
+	\$conf['cachecss'] = false;
 	\$conf['cachejsparams']['driver'] = 'filesystem';
 	\$conf['cachejsparams']['compress'] = 'php';
 	\$conf['cachejsparams']['lifetime'] = 86400;
-	\$conf['cachejs'] = true;
+	\$conf['cachejs'] = false;
 	\$conf['cachethemesparams']['check'] = 'appversion';
 	\$conf['cachethemesparams']['lifetime'] = 604800;
-	\$conf['cachethemes'] = true;
+	\$conf['cachethemes'] = false;
 	\$conf['lock']['params']['driverconfig'] = 'horde';
 	\$conf['lock']['driver'] = 'Sql';
 	\$conf['token']['params']['driverconfig'] = 'horde';
@@ -1266,6 +1267,14 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['memcache']['enabled'] = true;
 	\$conf['activesync']['enabled'] = false;
 	/* CONFIG END. DO NOT CHANGE ANYTHING IN OR BEFORE THIS LINE. */
+	EOF
+
+
+# Enable Horde's mail module IMP to authenticate with the IMAP server
+# using the credentials provided to horde
+sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
+	<?php
+	\$servers['imap']['hordeauth'] = true;
 	EOF
 
 if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
