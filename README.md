@@ -1,3 +1,7 @@
+___Note: This script is unfinished, but it does accomplish setting up
+a mail server and IMAP server and Horde. I will continue to work on it
+when I have time.___
+
 Configure-server shell script
 =============================
 
