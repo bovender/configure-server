@@ -153,6 +153,12 @@ install() {
 	else
 		heading "'$*': installed already."
 	fi
+	for p in "$@"; do
+		if [[ $(dpkg -s $p 2>&1 | grep -i "not installed") ]]; then
+                        message "Required package $p still not installed -- aborting."
+                        exit 1
+		fi
+	done
 }
 
 # Synchronizes the script on the desktop with the one on the server
@@ -393,11 +399,11 @@ if [[ $(find . -name '*.pem') ]]; then
 fi
 
 # Install required packages
-install postfix dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre
-install pwgen slapd ldap-utils bsd-mailx
-install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
-install php5-ldap php5-memcache memcached php-apc
-install libimage-exiftool-perl aspell aspell-de aspell-de-alt php5-imagick php5-memcache
+install postfix dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre \
+        pwgen slapd ldap-utils bsd-mailx \
+        spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear \
+        php5-ldap php5-memcache memcached php-apc \
+        libimage-exiftool-perl aspell aspell-de aspell-de-alt php5-imagick php5-memcache
 
 # Internal passwords for LDAP access
 postfix_ldap_pw=$(pwgen -cns 16 1)
