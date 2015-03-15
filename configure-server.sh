@@ -1300,14 +1300,11 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	ServerAdmin webmaster@$server_fqdn
 	ServerName $horde_fqdn
 	DocumentRoot $horde_dir
-	<Directory />
-		Options FollowSymLinks
-		AllowOverride None
-	</Directory>
 	<Directory $horde_dir>
 		AllowOverride None
 		Order allow,deny
 		allow from all
+                Require all granted
 	</Directory>
 
 	ErrorLog \${APACHE_LOG_DIR}/error.log
