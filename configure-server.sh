@@ -399,7 +399,7 @@ if [[ $(find . -name '*.pem') ]]; then
 fi
 
 # Install required packages
-install postfix dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre \
+install postfix dovecot-ldap postfix-ldap postfix-pcre \
         pwgen slapd ldap-utils bsd-mailx \
         spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear \
         php5-ldap php5-memcache memcached php-apc \
@@ -1290,7 +1290,7 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	else
 		horde_fqdn=$server_fqdn
 	fi
-	sudo tee /etc/apache2/sites-available/horde > /dev/null <<EOF
+	sudo tee /etc/apache2/sites-available/horde.conf > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:80>
 	ServerName $horde_fqdn
