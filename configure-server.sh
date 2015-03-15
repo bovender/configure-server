@@ -14,7 +14,7 @@
 
 # Configuration variables
 subdomain=
-domain=deb
+domain=ubuntu
 tld=vbox
 server_fqdn=$subdomain.$domain.$tld
 server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
