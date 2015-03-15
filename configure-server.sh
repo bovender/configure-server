@@ -393,7 +393,7 @@ if [[ $(find . -name '*.pem') ]]; then
 fi
 
 # Install required packages
-install dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre
+install postfix dovecot-postfix dovecot-ldap postfix-ldap postfix-pcre
 install pwgen slapd ldap-utils bsd-mailx
 install spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear
 install php5-ldap php5-memcache memcached php-apc
