@@ -418,10 +418,10 @@ fi
 
 # Install required packages
 install postfix dovecot-ldap postfix-ldap postfix-pcre \
-        pwgen slapd ldap-utils bsd-mailx \
-        spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear \
-        php5-ldap php5-memcache memcached php-apc \
-        libimage-exiftool-perl aspell aspell-de aspell-de-alt php5-imagick php5-memcache
+  pwgen slapd ldap-utils bsd-mailx \
+  spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear \
+  php5-ldap php5-memcache memcached php-apc \
+  libimage-exiftool-perl aspell aspell-de aspell-de-alt php5-imagick php5-memcache
 
 # Internal passwords for LDAP access
 postfix_ldap_pw=$(pwgen -cns 16 1)
