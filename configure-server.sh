@@ -547,7 +547,7 @@ dn: olcDatabase={1}hdb,cn=config
 changetype: modify
 add: olcAccess
 #olcAccess: to dn.children=$ldapusersDN 
-# by dn=$hordeDN manage break
+ by dn=$hordeDN manage break
 # Passwords may only be accessed for authentication, or modified by the 
 # correponsing users and admin.
 olcAccess: to attrs=userPassword 
@@ -944,7 +944,7 @@ fi
 #	reject_unknown_sender_domain \
 # after 'reject_non_fqdn_sender'. Note however that this will cause all e-mails
 # from your local, non-DNS-registered test domain to be rejected.
-sudo sed -i '/^smtpd_recipient_restrictions/ d' $postfix_main
+sudo sed -i '/^smtpd_recipient_restrictions/,/^\spermit$/d' $postfix_main
 sudo tee -a $postfix_main >/dev/null <<EOF
 smtpd_recipient_restrictions = 
 	reject_non_fqdn_recipient,
