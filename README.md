@@ -279,6 +279,12 @@ The reason for this apparent complexity is that my laptop is not
 always connected to the internet, and if it is, it may use wireless or
 ethernet. Using a host-only adapter allows me to have my own 'virtual'
 network regardless of whether my laptop is online or not.
+
+If you run the `configure-server` script in the VirtualBox terminal
+(i.e., not in an SSH session), the script will detect that it is
+running in a VirtualBox system and install the Guest Additions,
+provided the installer has been 'inserted' into the virtual CD-ROM
+drive.
    
 
 ### Configuring static IP for the host and the guest ###
