@@ -90,6 +90,9 @@ owncloud_database=owncloud
 horde_dir=/var/horde
 horde_subdomain=horde
 
+# OwnCloud parameters
+owncloud_subdomain=cloud
+
 # Internal ('work') variables
 homepage="https://github.com/bovender/configure-server"
 msgstr="*** "
@@ -323,9 +326,9 @@ heading "This will configure the Ubuntu server. ***"
 # Find out about the current environment
 # ########################################################################
 
-# if this is the server, the script should be executed in an SSH
-# if no SSH is found, try to find out if is a server running in
-# a VirtualBox. 
+# if this is the server, the script should be executed in an SSH if no SSH is
+# found, try to find out if is a server running in a VirtualBox, in which case
+# the VirtualBox guest additions will be installed. 
 if [ -z "$SSH_CLIENT" ]; then
 	# Use virt-what to determine if we are running in a virtual machine.
 	install virt-what
@@ -365,13 +368,9 @@ if [ -z "$SSH_CLIENT" ]; then
 					yesno "Generate SSL certificates and copy them to server?" answer y
 					if (( $? )); then 
 						generate_cert *.$domain.$tld
-						generate_cert $domain.$tld
-						if [[ ! $domain.$tld==$server_fqdn ]]; then
-							generate_cert $server_fqdn
-						fi
-						if [[ -n $horde_subdomain ]]; then
-							generate_cert $horde_subdomain.$server_fqdn
-						fi
+						generate_cert $server_fqdn
+						generate_cert $horde_subdomain.$server_fqdn
+						generate_cert $owncloud_subdomain.$server_fqdn
 						rsync $ca_dir/certs/$ca_name.pem $user@$server_fqdn:.
 					fi
 				fi
@@ -429,6 +428,10 @@ postfix_ldap_pw=$(pwgen -cns 16 1)
 dovecot_ldap_pw=$(pwgen -cns 16 1)
 horde_ldap_pw=$(pwgen -cns 16 1)
 
+# Internal passwords for MySQL access
+horde_mysql_pw=$(pwgen -cns 16 1)
+owncloud_mysql_pw=$(pwgen -cns 16 1)
+
 # Configure SSH
 if [[ -n $(grep -i '^AllowUsers $user' /etc/ssh/sshd_config) ]]; then
 	heading "Configuring SSH to allow only $user to log in."
@@ -482,6 +485,23 @@ if [[ ! $(sudo grep "^$(whoami)" /etc/sudoers) ]]; then
 else
 	heading "Sudoers already configured."
 fi
+
+# ##################
+# MySQL
+# ##################
+
+heading "Creating MySQL users and databases for applications."
+echo "When prompted, please enter the MySQL database's administrative user's password."
+mysql -u $mysqladmin -p <<EOF
+	DROP USER '$horde_user';
+	CREATE USER '$horde_user' IDENTIFIED BY '$horde_mysql_pw';
+	DROP USER '$owncloud_user';
+	CREATE USER '$owncloud_user' IDENTIFIED BY '$owncloud_mysql_pw';
+	CREATE DATABASE IF NOT EXISTS '$horde_database';
+	CREATE DATABASE IF NOT EXISTS '$owncloud_database';
+	GRANT ALL PRIVILEGES ON '$horde_database' TO '$horde_user';
+	GRANT ALL PRIVILEGES ON '$owncloud_database' TO '$owncloud_user';
+EOF
 
 
 # ##################
@@ -1119,8 +1139,14 @@ if [[ ! -d $horde_dir ]]; then
 	sudo pear install horde/webmail
 	sudo pear install horde/Horde_Ldap
 	sudo pear install horde/Horde_Memcache
-        echo "Creating database $horde_database, please enter MySQL password."
-	mysql -u$mysqladmin -p -e "create database $horde_database;"
+
+        message "When prompted, enter the following information:"
+        message "- Database name:     $horde_database"
+        message "- Database user:     $horde_user"
+        message "- Database password: $horde_mysql_pw"
+        message "Note that a configuration will be written later on that also contains"
+        message "this information. The horde installer needs the credentials to create"
+        message "the database tables."
 	sudo webmail-install
 	sudo chown www-data:www-data $horde_dir
 else
@@ -1130,7 +1156,6 @@ fi
 # Adjust horde configuration
 heading "Adjusting horde configuration..."
 # sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_ldap_pw';/" $horde_dir/config/conf.php
-read -sp "Please enter the MySQL password for $mysqladmin: " mysql_admin_pw
 
 # Extract the local horde's secret key
 horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' /$horde_dir/config/conf.php`
@@ -1158,10 +1183,10 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['session']['timeout'] = 0;
 	\$conf['cookie']['domain'] = \$_SERVER['SERVER_NAME'];
 	\$conf['cookie']['path'] = '/';
-	\$conf['sql']['username'] = '$mysqladmin';
-	\$conf['sql']['password'] = '$mysql_admin_pw';
+	\$conf['sql']['username'] = '$horde_user';
+	\$conf['sql']['password'] = '$horde_mysql_pw';
 	\$conf['sql']['protocol'] = 'unix';
-	\$conf['sql']['database'] = 'horde';
+	\$conf['sql']['database'] = '$horde_database';
 	\$conf['sql']['charset'] = 'utf-8';
 	\$conf['sql']['ssl'] = true;
 	\$conf['sql']['splitread'] = false;
@@ -1369,12 +1394,38 @@ fi
 # Finish up
 # #######################################################################
 
+pwmsg=<<EOF
+MySQL user names and passwords for applications:
+- Horde: $horde_user --> $horde_mysql_pw
+- OwnCloud: $owncloud_user --> $owncloud_mysql_pw
+
+Horde has been set up at address http://$horde_subdomain.$domain.$tld
+EOF
+
+infofile=mysql-passwords
+echo $pwmsg > ~/$infofile
+
 mail -s "Message from configure-server.sh" root <<-EOF
 	Hello,
 
-	this is just to inform you that the configure-server script was run.
+	the configure-server script has finished setting up the server.
 
-	Script: $0
+	Script command line: $0
+
+  $pwmsg
+  
+  -- 
+  $homepage
 	EOF
 
-# vim: fo+=ro
+heading "Finished."
+echo "Please make a note of the following information:"
+echo $pwmsg
+echo <<-EOF
+	This information has also been stored in ~/$infofile, and it was mailed
+	to you. Please delete this file and the e-mail once you have written down the
+	passwords somewhere.
+	$homepage
+EOF
+
+# vim: fo+=ro ts=2 sw=2 noet
