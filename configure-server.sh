@@ -1330,11 +1330,7 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 
 if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 	heading "Configuring horde subdomain for apache..."
-	if [[ -n $horde_subdomain ]]; then
-		horde_fqdn=$horde_subdomain.$server_fqdn
-	else
-		horde_fqdn=$server_fqdn
-	fi
+        horde_fqdn=$horde_subdomain.$server_fqdn
 	sudo tee /etc/apache2/sites-available/horde.conf > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:80>
