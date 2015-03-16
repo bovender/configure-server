@@ -1086,11 +1086,11 @@ sudo sed -i -r "s/^(dnpass =).*$/\1 $dovecot_ldap_pw/" $dovecot_base/dovecot-lda
 if [[ -z $(id $vmailuser) ]]; then
 	heading "Adding vmail user..."
 	sudo adduser --system --home $vmailhome --uid 5000 --group $vmailuser
-	sudo chown $vmailuser:$vmailuser $vmailhome
-	sudo chmod -R 750 $vmailhome
 else
 	heading "User $vmailuser already exists."
 fi
+sudo chown $vmailuser:$vmailuser $vmailhome
+sudo chmod -R 750 $vmailhome
 
 # Configure SSL/TLS for the mail suite
 # dovecot-postfix already did some work for us, so that we only need to
