@@ -91,6 +91,9 @@ horde_dir=/var/horde
 horde_subdomain=horde
 
 # OwnCloud parameters
+# The OwnCloud dir should always end in 'owncloud' as this is the name of the
+# directory in the distributed tarball.
+owncloud_dir=/var/owncloud
 owncloud_subdomain=cloud
 
 # Internal ('work') variables
@@ -1105,13 +1108,6 @@ sudo sed -i -r 's#^(ssl_cert = <).*$#\1/etc/ssl/certs/dovecot.pem#'  10-ssl.conf
 sudo sed -i -r 's#^(ssl_key = <).*$#\1/etc/ssl/private/dovecot.pem#' 10-ssl.conf
 popd
 
-# Lastly, restart Postfix and Dovecot
-if (( restart_postfix+restart_dovecot )); then 
-	heading "Restarting services..."
-fi
-if (( restart_postfix )); then sudo service postfix restart; fi
-if (( restart_dovecot )); then sudo service dovecot restart; fi
-
 
 # ######################
 # PHPmyadmin
@@ -1325,9 +1321,9 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 	\$servers['imap']['hordeauth'] = true;
 	EOF
 
-if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
-	heading "Configuring horde subdomain for apache..."
-        horde_fqdn=$horde_subdomain.$server_fqdn
+if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
+	horde_fqdn=$horde_subdomain.$server_fqdn
+	heading "Configuring Horde subdomain ($horde_subdomain.$server_fqdn) for Apache..."
 	sudo tee /etc/apache2/sites-available/horde.conf > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:80>
@@ -1342,7 +1338,7 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 		AllowOverride None
 		Order allow,deny
 		allow from all
-                Require all granted
+		Require all granted
 	</Directory>
 
 	ErrorLog \${APACHE_LOG_DIR}/error.log
@@ -1370,29 +1366,87 @@ if [[ ! -a /etc/apache2/sites-enabled/horde ]]; then
 		downgrade-1.0 force-response-1.0
 	# MSIE 7 and newer should be able to use keepalive
 	BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
-
 </VirtualHost>
 </IfModule>
 EOF
 	sudo a2ensite horde
-	sudo a2enmod ssl rewrite
-	sudo service apache2 restart
+	restart_apache=1
 else
 	heading "Horde subdomain for apache already configured."
 fi
 
+if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
+	owncloud_fqdn=$owncloud_subdomain.$server_fqdn
+	heading "Configuring OwnCloud subdomain ($owncloud_fqdn) for Apache..."
+	sudo tee /etc/apache2/sites-available/owncloud.conf > /dev/null <<EOF
+<IfModule mod_ssl.c>
+<VirtualHost *:80>
+	ServerName $owncloud_fqdn
+	Redirect permanent / https://$owncloud_fqdn/
+</Virtualhost>
+<VirtualHost *:443>
+	ServerAdmin webmaster@$server_fqdn
+	ServerName $owncloud_fqdn
+	DocumentRoot $owncloud_dir
+	<Directory $owncloud_dir>
+		AllowOverride None
+		Order allow,deny
+		allow from all
+		Require all granted
+	</Directory>
+
+	ErrorLog \${APACHE_LOG_DIR}/error.log
+
+	# Possible values include: debug, info, notice, warn, error, crit,
+	# alert, emerg.
+	LogLevel warn
+
+	CustomLog \${APACHE_LOG_DIR}/ssl_access.log combined
+
+	SSLEngine on
+	SSLCertificateFile    /etc/ssl/certs/$owncloud_fqdn.pem
+	SSLCertificateKeyFile /etc/ssl/private/$owncloud_fqdn.key
+
+	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
+	<FilesMatch "\.(cgi|shtml|phtml|php)$">
+		SSLOptions +StdEnvVars
+	</FilesMatch>
+	<Directory /usr/lib/cgi-bin>
+		SSLOptions +StdEnvVars
+	</Directory>
+
+	BrowserMatch "MSIE [2-6]" \
+		nokeepalive ssl-unclean-shutdown \
+		downgrade-1.0 force-response-1.0
+	# MSIE 7 and newer should be able to use keepalive
+	BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+</VirtualHost>
+</IfModule>
+EOF
+	sudo a2ensite owncloud
+	restart_apache=1
+else
+	heading "OwnCloud subdomain ($owncloud_subdomain.$server_fqdn) for Apache already configured."
+fi
+sudo a2enmod ssl rewrite
 
 # #######################################################################
 # Finish up
 # #######################################################################
+
+# Lastly, restart Postfix and Dovecot
+if (( restart_postfix+restart_dovecot+restart_apache )); then 
+	heading "Restarting services..."
+fi
+if (( restart_postfix )); then sudo service postfix restart; fi
+if (( restart_dovecot )); then sudo service dovecot restart; fi
+if (( restart_apache )); then sudo service apache2 restart; fi
 
 # Multi-line variable: see http://stackoverflow.com/a/1655389/270712
 read -r -d '' pwmsg <<EOF
 MySQL user names and passwords for applications:
 - Horde: $horde_user --> $horde_mysql_pw
 - OwnCloud: $owncloud_user --> $owncloud_mysql_pw
-
-Horde has been set up at address http://$horde_subdomain.$domain.$tld
 EOF
 
 infofile=mysql-passwords
@@ -1405,6 +1459,14 @@ Hello root,
 the configure-server script has finished setting up the server at $server_fqdn.
 
 Script command line: $0
+
+Horde has been set up at address http://$horde_subdomain.$server_fqdn
+
+An Apache virtual host for OwnCloud has been set up at http://$owncloud_subdomain.$server_fqdn
+However, OwnCloud has not been automatically installed. To install, download
+the server package from http://owncloud.org, extract it into ${owncloud_dir%owncloud}
+(sudo tar xjf owncloud-x.y.z.tar.bz2 -C ${owncloud_dir%owncloud}),
+and change the ownership for Apache (sudo chown -R www-data $owncloud_dir).
 
 $pwmsg
 
