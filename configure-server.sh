@@ -674,6 +674,7 @@ then
 		maildrop: postmaster
 		maildrop: webmaster
 		maildrop: abuse
+		maildrop: ca
 		# The homeDirectory attribute is required by the schema, but we leave
 		# it empty since we are going to use $vmailhome as the uniform base
 		# for all accounts.
