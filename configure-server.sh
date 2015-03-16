@@ -1093,20 +1093,15 @@ sudo chown $vmailuser:$vmailuser $vmailhome
 sudo chmod -R 750 $vmailhome
 
 # Configure SSL/TLS for the mail suite
-# dovecot-postfix already did some work for us, so that we only need to
-# adjust symlinks.
 heading "Updating SSL certificate paths..."
-if [[ "$server_fqdn"=="$domain.$tld" ]]; then
-	sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/ssl-mail.pem
-	sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/ssl-mail.key
-	sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/dovecot.pem
-	sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/dovecot.pem
-else
-	sudo ln -sf /etc/ssl/certs/wildcard.$domain.$tld.pem   /etc/ssl/certs/ssl-mail.pem
-	sudo ln -sf /etc/ssl/private/wildcard.$domain.$tld.key /etc/ssl/private/ssl-mail.key
-	sudo ln -sf /etc/ssl/certs/wildcard.$domain.$tld.pem   /etc/ssl/certs/dovecot.pem
-	sudo ln -sf /etc/ssl/private/wildcard.$domain.$tld.key /etc/ssl/private/dovecot.pem
-fi
+sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/ssl-mail.pem
+sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/ssl-mail.key
+sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/dovecot.pem
+sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/dovecot.pem
+pushd /etc/dovecot/conf.d
+sudo sed -i -r 's#^(ssl_cert = <).*$#\1/etc/ssl/certs/dovecot.pem#'  10-ssl.conf
+sudo sed -i -r 's#^(ssl_key = <).*$#\1/etc/ssl/private/dovecot.pem#' 10-ssl.conf
+popd
 
 # Lastly, restart Postfix and Dovecot
 if (( restart_postfix+restart_dovecot )); then 
