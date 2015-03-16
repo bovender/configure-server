@@ -950,8 +950,6 @@ smtpd_recipient_restrictions =
 	reject_non_fqdn_sender,
 	reject_unknown_recipient_domain,
 	permit_mynetworks,
-#	TODO: Make the following restriction work.
-#	reject_sender_login_mismatch,
 	reject_unauth_destination,
 	check_recipient_access hash:$postfix_base/roleaccount_exceptions,
 	reject_multi_recipient_bounce,
