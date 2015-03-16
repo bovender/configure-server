@@ -2,8 +2,8 @@
 
 # #######################################################################
 # Configure-server.sh
-# Script to configure a Ubuntu server.
-# (c) Daniel Kraus (bovender) 2012
+# Script to configure a Ubuntu (or Debian) server.
+# (c) Daniel Kraus (bovender) 2012-2014
 # MIT license.
 #
 # !!! USE AT YOUR OWN RISK !!!
@@ -12,26 +12,35 @@
 # harm that may be the result of running this script.
 # #######################################################################
 
-# Configuration variables
-subdomain=
+# #######################################################################
+# Configuration variables - edit to customize!
+# #######################################################################
+
+# Domain name of the server
 domain=ubuntu
 tld=vbox
-server_fqdn=$subdomain.$domain.$tld
-server_fqdn=${server_fqdn#.} # Remove the leading dot (if no subdomain)
+
+# Master user identification; note that this is not the server user,
+# but a user account that is stored in the LDAP database and is used
+# to log into Horde and the other services.
 user=daniel
 mail=dk
 full_user_name="Daniel Kraus"
-# simple password for demonstration purposes (will be used in LDAP)
 pw=pass 
+
+# The user name of the Dovecot virtual mail user.
 vmailuser=vmail
+
+# Default mail directory for the virtual mail user.
 vmailhome=/var/$vmailuser
 
 # SSL certificate handling $ca_dir is the path to your own certificate
-# authority. By default this is /media/{username}/CA/ca, meaning that your CA key is on a
-# drive labeled "CA" (e.g., a USB stick). If your certificates are signed by a
-# commercial CA, you may leave this empty. The script will auto-detect if the
-# USB drive is mounted and offer to generate fresh certificates for the
-# services that it will configure (Mail, LDAP, Apache virtual hosts, OwnCloud).
+# authority. By default this is /media/{username}/CA/ca, meaning that your CA
+# key is on a drive labeled "CA" (e.g., a USB stick). If your certificates are
+# signed by a commercial CA, you may leave this empty. The script will
+# auto-detect if the USB drive is mounted and offer to generate fresh
+# certificates for the services that it will configure (Mail, LDAP, Apache
+# virtual hosts, OwnCloud).
 ca_dir=/media/$USER/CA/ca
 ca_name=ca
 cert_days=1825
@@ -41,6 +50,13 @@ cert_state=Bavaria
 cert_org=bovender
 cert_ou="Certificate authority"
 cert_company=bovender
+
+# #######################################################################
+# End of configuration section; in most use cases you should not need to
+# edit anything below this comment.
+# #######################################################################
+
+server_fqdn=$domain.$tld
 
 # Postfix configuration directories
 postfix_base=/etc/postfix
@@ -65,11 +81,14 @@ pwhash="{SSHA}"
 
 # MySQL
 mysqladmin=root
+horde_user=horde
+horde_database=horde
+owncloud_user=owncloud
+owncloud_database=owncloud
 
 # Horde parameters
 horde_dir=/var/horde
 horde_subdomain=horde
-horde_database=horde
 
 # Internal ('work') variables
 homepage="https://github.com/bovender/configure-server"
@@ -1099,9 +1118,11 @@ if [[ ! -d $horde_dir ]]; then
 	sudo pear run-scripts horde/horde_role
 	sudo pear install horde/webmail
 	sudo pear install horde/Horde_Ldap
+	sudo pear install horde/Horde_Memcache
+        echo "Creating database $horde_database, please enter MySQL password."
 	mysql -u$mysqladmin -p -e "create database $horde_database;"
 	sudo webmail-install
-	sudo chown www-mail:www-mail $horde_dir
+	sudo chown www-data:www-data $horde_dir
 else
 	heading "Horde already installed."
 fi
