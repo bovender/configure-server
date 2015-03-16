@@ -5,8 +5,9 @@ when I have time.___
 Configure-server shell script
 =============================
 
-The configure-server script automagically configures a [Ubuntu
-Linux](http://www.ubuntu.com/business/server/overview) Server.
+The configure-server script automagically configures a remote [Ubuntu
+Linux](http://www.ubuntu.com/business/server/overview) or Debian
+Server.
 
 I am a server newbie, and while I am putting together all 
 configuration steps needed for a (more or less) complete server setup, 
@@ -28,17 +29,11 @@ machine.
 Prerequisites
 -------------
 
-The script is being developed on Ubuntu 12.04 'Precise Pangolin' Server
-Edition. It should hopefully run on a current Debian server as well,
-though I have not tested this (yet).
+The script is being developed on Ubuntu 14.04 'Trusty Tahr' Server
+Edition. It should run on a current Debian server as well.
 
-The only prerogative for this script is that you have installed Ubuntu
-Server with the following options:
-
-- LAMP
-- [Postfix][]
-
-The script does not support name server (DNS) configuration.
+During installation of the operating system, you should request a LAMP
+setup and of course an SSH daemon.
 
 
 Features
@@ -53,7 +48,9 @@ The script configures the following services:
   and TLS/STARTTLS support
 - [OpenLDAP][] server for central user management and single sign-on
 - [Horde][] groupware
-- [OwnCloud][] cloud server
+- It also creates an Apache2 virtual host and an MySQL user and
+  database for an [OwnCloud][] cloud server; you only need to download
+  and install the current OwnCloud release.
 
 
 Customizing the script
@@ -69,6 +66,8 @@ least the following variables:
 - `$user` -- this should be the same user that you created during
   installation of Ubuntu Server edition.
 - `$full\_user\_name`
+
+You will find all customization variables at the top of the script.
 
 
 Running the script
@@ -103,14 +102,6 @@ following resources (online & offline) useful:
 - [Ubuntu Server Guide][guide]
 
 
-### SSH ###
-
-The script configures SSH to permit only certificate-based logins.
-Without a certificate, you will not be able to log into your server.
-This means that the certificate must be uploaded prior to configuring
-the SSH daemon. The script will take care of this.
-
-
 ### LDAP ###
 
 I chose to set up an LDAP directory server because I was intrigued by
@@ -122,6 +113,10 @@ LDAP layout is heavily inspired by [The Book of Postfix][pf-book].
 
 The root of the data information tree (DIT) is construed from the
 `$domain` and `$tld` variables defined in the script.
+
+> If the OpenLDAP server does not accept your password, issue `sudo
+dpkg-reconfigure slapd` and enter `$domain.$tld` when asked about the
+machine name.
 
 User information is stored unter `ou=users,dc=$domain,dc=$tld` The
 entries' structural object class is `inetOrgPerson`. To be able to
@@ -149,15 +144,15 @@ To enable Postfix and Dovecot to look up information in the LDAP
 directory, another branch of the DIT is created as
 `ou=auth,dc=$domain,dc=$tld`; the corresponding entries are:
 
- cn=dovecot,ou=auth,dc=$domain,dc=$tld
- cn=postfix,ou=auth,dc=$domain,dc=$tld
+        cn=dovecot,ou=auth,dc=$domain,dc=$tld
+        cn=postfix,ou=auth,dc=$domain,dc=$tld
 
 These two users have ACL-controlled access to
 `ou=users,dc=$domain,dc=$tld`.
 
 In summary, the DIT that the script sets up looks as follows:
 
-TODO
+_TODO_
 
 __Important note:__ OpenLDAP is _extremely_ picky about spaces in LDIF
 files. Ordinarily every line is expected to have no leading spaces. If
@@ -214,9 +209,54 @@ Horde Webmail Edition is installed and configured with a subdomain.
 The subdomain's default name is 'horde' and can be customized in the
 `$horde_subdomain` variable.
 
-Horde is installed into `/var/horde`. The installation script will ask
-you for the connection parameters for the MySQL server, so you should
-have these at hand when running the script.
+Horde will ask you where to install; you may want to use `/var/horde`.
+The installation script will ask you for the connection parameters for
+the MySQL server, so you should have these at hand when running the
+script.
+
+
+MySQL users
+-----------
+
+Two MySQL users and databases are automatically created, one for the
+Horde groupware and one for OwnCloud.
+
+The 'horde' user is granted access to the 'horde' database; the
+predefined subdomain is 'horde'.
+
+The 'owncloud' is granted access to the 'owncloud' database; the
+predefined subdomain is 'cloud' (not owncloud, I found that's too
+long).
+
+Thus, if you have `$domain=example` and `$tld=com`, the resulting web
+addresses for your applications are `horde.example.com` and
+`cloud.example.com`.
+
+Whenever the `configure-server` script is run, it creates new random
+passwords for the two MySQL users. The passwords are mailed to the
+master user, and they are also stored in `~/mysql-passwords`. Make
+sure to delete this file and the mail when you have memorized the
+passwords ;-)
+
+
+SSL certificates
+----------------
+
+If a USB stick named `CA` is detected on the local computer (not on
+the server), the `configure-server` script will create a custom
+Certificate Authority (CA) and a number of certificates that are
+signed by this custom CA. The CA certificates will be stored on the
+USB stick. The signed certificates are uploaded to the server. When
+the script is run on the server, it will check for the presence of
+certificates in the home directory, and move them to the appropriate
+place.
+
+The mail and IMAP servers and the Horde and OwnCloud virtual Apache2
+hosts are configured to use these certificates.
+
+_You must use this feature at least once, or else your server will
+complain about missing certificates. All it takes is to plug in a USB
+drive named 'CA'._
 
 
 Setting up a Ubuntu Server VM
