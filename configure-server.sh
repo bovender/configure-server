@@ -525,6 +525,7 @@ EOF
 # database.
 if [[ -z $(sudo ldapsearch -LLL -Y EXTERNAL -H ldapi:/// -s one \
 	-b "olcDatabase={1}hdb,cn=config" "olcAccess=*postfix*" dn 2>/dev/null ) ]]
+# if (( 1 ))
 then
 	# Add the schema, ACLs and first user account to LDAP.
 	# Be aware that LDAP is picky about leading space!
@@ -548,12 +549,11 @@ delete: olcAccess
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
 add: olcAccess
-#olcAccess: to dn.children=$ldapusersDN 
- by dn=$hordeDN manage break
 # Passwords may only be accessed for authentication, or modified by the 
 # correponsing users and admin.
 olcAccess: to attrs=userPassword 
  by dn=$adminDN manage 
+ by dn=$hordeDN manage 
  by dn=$dovecotDN read 
  by anonymous auth 
  by self write 
@@ -562,6 +562,7 @@ olcAccess: to attrs=userPassword
 # Postfix can look up these attributes
 olcAccess: to attrs=uid,mail,maildrop 
  by dn=$adminDN manage 
+ by dn=$hordeDN manage 
  by self read 
  by users read 
  by dn=$postfixDN read 
@@ -572,6 +573,8 @@ olcAccess: to *
  by self write 
  by users read 
  by * none
+olcAccess: to dn.children=$ldapusersDN 
+ by dn=$hordeDN manage
 
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
