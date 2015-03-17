@@ -500,8 +500,8 @@ mysql -f -u $mysqladmin -p <<EOF
 	CREATE USER '$horde_user' IDENTIFIED BY '$horde_mysql_pw';
 	DROP USER '$owncloud_user';
 	CREATE USER '$owncloud_user' IDENTIFIED BY '$owncloud_mysql_pw';
-	CREATE DATABASE IF NOT EXISTS $horde_database;
-	CREATE DATABASE IF NOT EXISTS $owncloud_database;
+	CREATE DATABASE IF NOT EXISTS $horde_database CHARACTER SET utf8 COLLATE utf8_Unicode_ci;
+	CREATE DATABASE IF NOT EXISTS $owncloud_database CHARACTER SET utf8 COLLATE utf8_Unicode_ci;
 	GRANT ALL PRIVILEGES ON $horde_database.* TO '$horde_user';
 	GRANT ALL PRIVILEGES ON $owncloud_database.* TO '$owncloud_user';
 EOF
