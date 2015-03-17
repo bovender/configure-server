@@ -1417,6 +1417,22 @@ else
 fi
 sudo a2enmod ssl rewrite
 
+# If the default SSL host configuration contains the original 'snakeoil'
+# certificate, replace it with our own.
+default_ssl_conf=/etc/apache2/sites-available/default-ssl.conf
+if [[ $(grep -i "snakeoil" $default_ssl_conf) ]]; then
+	message "Configuring default SSL host to use our own certificate."
+	sudo sed -i -r 's_^(\s*SSLCertificateFile\s+).*$_\1/etc/ssl/certs/'$server_fqdn'.pem_' \
+		$default_ssl_conf
+	sudo sed -i -r 's_^(\s*SSLCertificateKeyFile\s+).*$_\1/etc/ssl/private/'$server_fqdn'.key_' \
+		$default_ssl_conf
+	sudo a2ensite default-ssl.conf
+	restart_apache=1
+else
+	message "Default SSL host already configured to use our own certificate."
+fi
+
+
 # #######################################################################
 # Finish up
 # #######################################################################
