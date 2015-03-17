@@ -48,7 +48,6 @@ cert_country=DE
 cert_city=Wuerzburg
 cert_state=Bavaria
 cert_org=bovender
-cert_ou="Certificate authority"
 cert_company=bovender
 
 # #######################################################################
@@ -272,7 +271,7 @@ generate_cert() {
 		stateOrProvinceName    = $cert_state
 		localityName           = $cert_city
 		0.organizationName     = $cert_org
-		organizationalUnitName = $cert_ou
+		# organizationalUnitName = $cert_ou
 		commonName             = $1
 		emailAddress           = ca@$server_fqdn
 
