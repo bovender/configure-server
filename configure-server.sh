@@ -1340,13 +1340,9 @@ if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 		Require all granted
 	</Directory>
 
-	ErrorLog \${APACHE_LOG_DIR}/error.log
-
-	# Possible values include: debug, info, notice, warn, error, crit,
-	# alert, emerg.
 	LogLevel warn
-
-	CustomLog \${APACHE_LOG_DIR}/ssl_access.log combined
+	ErrorLog \${APACHE_LOG_DIR}/horde-error.log
+	CustomLog \${APACHE_LOG_DIR}/horde-access.log combined
 
 	SSLEngine on
 	SSLCertificateFile    /etc/ssl/certs/$horde_fqdn.pem
@@ -1360,9 +1356,7 @@ if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 		SSLOptions +StdEnvVars
 	</Directory>
 
-	BrowserMatch "MSIE [2-6]" \
-		nokeepalive ssl-unclean-shutdown \
-		downgrade-1.0 force-response-1.0
+	BrowserMatch "MSIE [2-6]" nokeepalive ssl-unclean-shutdown downgrade-1.0 force-response-1.0
 	# MSIE 7 and newer should be able to use keepalive
 	BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
 </VirtualHost>
@@ -1394,13 +1388,9 @@ if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
 		Require all granted
 	</Directory>
 
-	ErrorLog \${APACHE_LOG_DIR}/error.log
-
-	# Possible values include: debug, info, notice, warn, error, crit,
-	# alert, emerg.
 	LogLevel warn
-
-	CustomLog \${APACHE_LOG_DIR}/ssl_access.log combined
+	ErrorLog \${APACHE_LOG_DIR}/owncloud-error.log
+	CustomLog \${APACHE_LOG_DIR}/owncloud-access.log combined
 
 	SSLEngine on
 	SSLCertificateFile    /etc/ssl/certs/$owncloud_fqdn.pem
@@ -1414,9 +1404,7 @@ if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
 		SSLOptions +StdEnvVars
 	</Directory>
 
-	BrowserMatch "MSIE [2-6]" \
-		nokeepalive ssl-unclean-shutdown \
-		downgrade-1.0 force-response-1.0
+	BrowserMatch "MSIE [2-6]" nokeepalive ssl-unclean-shutdown downgrade-1.0 force-response-1.0
 	# MSIE 7 and newer should be able to use keepalive
 	BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
 </VirtualHost>
