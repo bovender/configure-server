@@ -1206,8 +1206,9 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['auth']['params']['ad'] = false;
 	\$conf['auth']['params']['uid'] = 'uid';
 	\$conf['auth']['params']['encryption'] = 'ssha';
-	\$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson', 'CourierMailAccount', 'CourierMailAlias');
-	\$conf['auth']['params']['filter'] = '(objectclass=CourierMailAccount)';
+	# \$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson', 'CourierMailAccount', 'CourierMailAlias');
+	\$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson');
+	\$conf['auth']['params']['filter'] = '(objectclass=inetOrgPerson)';
 	\$conf['auth']['params']['password_expiration'] = 'no';
 	\$conf['auth']['params']['driverconfig'] = 'horde';
 	\$conf['auth']['driver'] = 'ldap';
