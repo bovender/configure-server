@@ -566,15 +566,14 @@ olcAccess: to attrs=uid,mail,maildrop
  by self read 
  by users read 
  by dn=$postfixDN read 
- by * none
+ by * read
 # An owner of an entry may modify it (and so may the admin);
 # deny read access to non-authenticated entities
 olcAccess: to * 
+ by dn=$hordeDN manage 
  by self write 
  by users read 
  by * none
-olcAccess: to dn.children=$ldapusersDN 
- by dn=$hordeDN manage
 
 dn: olcDatabase={1}hdb,cn=config
 changetype: modify
