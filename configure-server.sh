@@ -1486,20 +1486,12 @@ $(printf "%-11s %-10s %-38s %s" "Dovecot" "n/a" "$dovecot_ldap_user" "$dovecot_p
 $(printf "%-11s %-10s %-38s %s" "Postfix" "n/a" "$postfix_ldap_user" "$postfix_pass")
 
 
-These are the fingerprints of the SSL certificates:
+These are the SHA1 fingerprints of the SSL certificates:
 
-$server_fqdn
-	/etc/ssl/certs/${server_fqdn}.pem
-	$(get_fingerprint $server_fqdn)
-$horde_fqdn
-	/etc/ssl/certs/${horde_fqdn}.pem
-	$(get_fingerprint $horde_fqdn)
-$owncloud_fqdn
-	/etc/ssl/certs/${owncloud_fqdn}.pem
-	$(get_fingerprint $owncloud_fqdn)
-Dovecot IMAP server
-	/etc/ssl/certs/dovecot.pem
-	$(get_fingerprint dovecot)
+$(printf "%-20s %s" "$server_fqdn" $(get_fingerprint $server_fqdn))
+$(printf "%-20s %s" "$horde_fqdn" $(get_fingerprint $horde_fqdn))
+$(printf "%-20s %s" "$owncloud_fqdn" $(get_fingerprint $owncloud_fqdn))
+$(printf "%-20s %s" "Dovecot IMAP server" $(get_fingerprint dovecot))
 EOF
 
 infofile=readme-configure-server
