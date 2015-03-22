@@ -16,23 +16,23 @@
 # Configuration variables - edit to customize!
 # #######################################################################
 
-# Domain name of the server
+# Domain names; the subdomains for Horde and OwnCloud must NOT be empty!
 domain=ubuntu
 tld=vbox
+horde_subdomain=horde
+owncloud_subdomain=cloud
 
-# Master user identification; note that this is not the server user,
-# but a user account that is stored in the LDAP database and is used
-# to log into Horde and the other services.
-user=daniel
-mail=dk
-full_user_name="Daniel Kraus"
-pw=pass 
+# Details of the 'admin user'.
+# Note that this is not the server user, but a user account that is stored in
+# the LDAP database and is used to administer Horde and the other services.
+admin_user=daniel
+admin_mail=dk
+admin_real_name="Daniel Kraus"
+admin_pass=pass 
 
-# The user name of the Dovecot virtual mail user.
-vmailuser=vmail
-
-# Default mail directory for the virtual mail user.
-vmailhome=/var/$vmailuser
+# Parameters for the virtual mail user (a role that Dovecot assumes)
+vmail_user=vmail
+vmail_dir=/var/$vmail_user
 
 # SSL certificate handling $ca_dir is the path to your own certificate
 # authority. By default this is /media/{username}/CA/ca, meaning that your CA
@@ -55,7 +55,10 @@ cert_company=bovender
 # edit anything below this comment.
 # #######################################################################
 
+# Domain names
 server_fqdn=$domain.$tld
+horde_fqdn=$horde_subdomain.$server_fqdn
+owncloud_fqdn=$owncloud_subdomain.$server_fqdn
 
 # Postfix configuration directories
 postfix_base=/etc/postfix
@@ -71,37 +74,44 @@ ldapbaseDN="dc=$domain,dc=$tld"
 ldapusersDN="ou=users,$ldapbaseDN"
 ldapauthDN="ou=auth,$ldapbaseDN"
 adminDN="cn=admin,$ldapbaseDN"
-# Do not change the following two, as 'dovecot' and 'postfix' are
-# hard-coded elsewhere (namely, in the 'cn: ...' directives of LDIF)
-dovecotDN="cn=dovecot,$ldapauthDN"
-postfixDN="cn=postfix,$ldapauthDN"
-hordeDN="cn=horde,$ldapauthDN"
 pwhash="{SSHA}"
 
-# MySQL
-mysqladmin=root
-horde_user=horde
+# MySQL 
+mysql_admin=root
 horde_database=horde
-owncloud_user=owncloud
 owncloud_database=owncloud
+
+# Control users for MySQL and OpenLDAP
+# These control users get new, random passwords whenever the script
+# is run; the generated passwords are mailed to root at the end.
+horde_mysql_user=horde
+owncloud_mysql_user=owncloud
+# Do not change the following LDAP defintions, because 'dovecot' and
+# 'postfix' are hard-coded in the 'cn: ...' directives of LDIF files
+dovecot_ldap_user="cn=dovecot,$ldapauthDN"
+postfix_ldap_user="cn=postfix,$ldapauthDN"
+horde_ldap_user="cn=horde,$ldapauthDN"
+owncloud_ldap_user="cn=owncloud,$ldapauthDN"
 
 # Horde parameters
 horde_dir=/var/horde
-horde_subdomain=horde
 
 # OwnCloud parameters
 # The OwnCloud dir should always end in 'owncloud' as this is the name of the
 # directory in the distributed tarball.
 owncloud_dir=/var/owncloud
-owncloud_subdomain=cloud
+
+# Command to generate a random password (used for control users)
+password_cmd="pwgen -cns 16 1"
 
 # Internal ('work') variables
+version=0.0.1 # Semantic version
 homepage="https://github.com/bovender/configure-server"
 msgstr="*** "
 bold=`tput bold`
 normal=`tput sgr0`
-restart_postfix=0
-ip=$(ip address show dev eth0 | awk '/inet / { print $2 }' | grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}')
+ip=$(ip address show dev eth0 2> /dev/null | awk '/inet / { print $2 }' \
+	| grep -o -E '([0-9]{1,3}\.){3}[0-9]{1,3}')
 
 shopt -s nocasematch
 
@@ -187,10 +197,10 @@ install() {
 
 # Synchronizes the script on the desktop with the one on the server
 sync_script() {
-	rsync -vuza $0 $user@$server_fqdn:.
+	rsync -vuza $0 $admin_user@$server_fqdn:.
 	code=$?
 	if (( code==0 )); then
-		rsync -vuza $user@$server_fqdn:$(basename $0) .
+		rsync -vuza $admin_user@$server_fqdn:$(basename $0) .
 		code=$?
 	fi
 	return $code
@@ -303,12 +313,20 @@ generate_cert() {
 		rm "$0.openssl" "$filename.csr"
 		chmod 444 "$filename.pem"
 		chmod 400 "$filename.key"
-		rsync -v "$filename.pem" "$filename.key" $user@$server_fqdn:
+		rsync -v "$filename.pem" "$filename.key" $admin_user@$server_fqdn:
 	else
 		message "Failed to generate certificate signing request for $1."
 		exit 3
 	fi
 	rm -f "$filename.key" "$filename.pem" 2>&1 >/dev/null
+}
+
+# Returns the fingerprint of an SSL certificate.
+# @param $1 Base name of the certificate (in /etc/ssl/certs/).
+# @return Fingerprint
+get_fingerprint() {
+	echo `openssl x509 -fingerprint -noout -in /etc/ssl/certs/${1%.pem}.pem \
+	 	| awk -F '=' '{ print $2 }'`
 }
 
 
@@ -355,7 +373,7 @@ if [ -z "$SSH_CLIENT" ]; then
 	else # not running in a Virtual Box
 		
 		heading "You appear to be on a remote desktop computer."
-		echo "Configured remote: $bold$user@$server_fqdn$normal"
+		echo "Configured remote: $bold$admin_user@$server_fqdn$normal"
 		yesno "Synchronize the script with the one on the server?" answer y
 		if (( $? )); then
 			message "Updating..."
@@ -371,15 +389,15 @@ if [ -z "$SSH_CLIENT" ]; then
 					if (( $? )); then 
 						generate_cert *.$domain.$tld
 						generate_cert $server_fqdn
-						generate_cert $horde_subdomain.$server_fqdn
-						generate_cert $owncloud_subdomain.$server_fqdn
-						rsync $ca_dir/certs/$ca_name.pem $user@$server_fqdn:.
+						generate_cert $horde_fqdn
+						generate_cert $owncloud_fqdn
+						rsync $ca_dir/certs/$ca_name.pem $admin_user@$server_fqdn:.
 					fi
 				fi
 				yesno "Log into secure shell?" answer y
 				if (( $? )); then
 					heading "Logging into server's secure shell..."
-					ssh $user@$server_fqdn
+					ssh $admin_user@$server_fqdn
 					message "Returned from SSH session."
 					sync_script
 					exit 
@@ -425,21 +443,18 @@ install postfix dovecot-ldap postfix-ldap postfix-pcre \
   php5-ldap php5-memcache memcached php-apc \
   libimage-exiftool-perl aspell aspell-de aspell-de-alt php5-imagick php5-memcache
 
-# Internal passwords for LDAP access
-postfix_ldap_pw=$(pwgen -cns 16 1)
-dovecot_ldap_pw=$(pwgen -cns 16 1)
-horde_ldap_pw=$(pwgen -cns 16 1)
-
-# Internal passwords for MySQL access
-horde_mysql_pw=$(pwgen -cns 16 1)
-owncloud_mysql_pw=$(pwgen -cns 16 1)
+# Passwords for control users and services
+postfix_pass=$($password_cmd)
+dovecot_pass=$($password_cmd)
+horde_pass=$($password_cmd)
+owncloud_pass=$($password_cmd)
 
 # Configure SSH
-if [[ -n $(grep -i '^AllowUsers $user' /etc/ssh/sshd_config) ]]; then
-	heading "Configuring SSH to allow only $user to log in."
-	sudo sed -i '/^AllowUsers/ d; s/^(PermitRootLogin.*).*$/\1no' /etc/ssh/sshd_config
+if [[ -n $(grep -i "^AllowUsers $USER" /etc/ssh/sshd_config) ]]; then
+	heading "Configuring SSH to allow only $USER to log in."
+	sudo sed -ir '/^AllowUsers/ d; s/^(PermitRootLogin\s*).*$/\1no/' /etc/ssh/sshd_config
 	sudo tee -a /etc/ssh/sshd_config >/dev/null <<-EOF
-		AllowUsers $user
+		AllowUsers $USER
 		EOF
 fi
 
@@ -495,15 +510,15 @@ fi
 heading "Creating MySQL users and databases for applications."
 echo "When prompted, please enter the MySQL database's administrative user's password."
 # Run mysql with the -f option to continue after errors.
-mysql -f -u $mysqladmin -p <<EOF
-	DROP USER '$horde_user';
-	CREATE USER '$horde_user' IDENTIFIED BY '$horde_mysql_pw';
-	DROP USER '$owncloud_user';
-	CREATE USER '$owncloud_user' IDENTIFIED BY '$owncloud_mysql_pw';
+mysql -f -u $mysql_admin -p <<EOF
+	DROP USER '$horde_mysql_user';
+	CREATE USER '$horde_mysql_user' IDENTIFIED BY '$horde_pass';
+	DROP USER '$owncloud_mysql_user';
+	CREATE USER '$owncloud_mysql_user' IDENTIFIED BY '$owncloud_pass';
 	CREATE DATABASE IF NOT EXISTS $horde_database CHARACTER SET utf8 COLLATE utf8_Unicode_ci;
 	CREATE DATABASE IF NOT EXISTS $owncloud_database CHARACTER SET utf8 COLLATE utf8_Unicode_ci;
-	GRANT ALL PRIVILEGES ON $horde_database.* TO '$horde_user';
-	GRANT ALL PRIVILEGES ON $owncloud_database.* TO '$owncloud_user';
+	GRANT ALL PRIVILEGES ON $horde_database.* TO '$horde_mysql_user';
+	GRANT ALL PRIVILEGES ON $owncloud_database.* TO '$owncloud_mysql_user';
 EOF
 
 
@@ -553,8 +568,8 @@ add: olcAccess
 # correponsing users and admin.
 olcAccess: to attrs=userPassword 
  by dn=$adminDN manage 
- by dn=$hordeDN manage 
- by dn=$dovecotDN read 
+ by dn=$horde_ldap_user manage 
+ by dn=$dovecot_ldap_user read 
  by anonymous auth 
  by self write 
  by * none
@@ -562,15 +577,15 @@ olcAccess: to attrs=userPassword
 # Postfix can look up these attributes
 olcAccess: to attrs=uid,mail,maildrop 
  by dn=$adminDN manage 
- by dn=$hordeDN manage 
+ by dn=$horde_ldap_user manage 
  by self read 
  by users read 
- by dn=$postfixDN read 
+ by dn=$postfix_ldap_user read 
  by * read
 # An owner of an entry may modify it (and so may the admin);
 # deny read access to non-authenticated entities
 olcAccess: to * 
- by dn=$hordeDN manage 
+ by dn=$horde_ldap_user manage 
  by self write 
  by users read 
  by * none
@@ -662,47 +677,50 @@ if (( $code!=0 )); then
 	exit 2
 fi
 
-if [[ -z $(ldapsearch -LLL -w $ldap_admin_pw -D "$adminDN" -b "$ldapusersDN" "uid=$user" uid) ]]
+if [[ -z $(ldapsearch -LLL -w $ldap_admin_pw -D "$adminDN" -b "$ldapusersDN" "uid=$admin_user" uid) ]]
 then
-	message "Adding an entry for user $user to the LDAP tree..."
+	message "Adding an entry for user $admin_user to the LDAP tree..."
 	ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// <<-EOF
 		dn: $ldapusersDN
 		ou: users
 		objectClass: organizationalUnit
 
-		dn: uid=$user,$ldapusersDN
+		dn: uid=$admin_user,$ldapusersDN
 		objectClass: inetOrgPerson
 		objectClass: CourierMailAlias
 		objectClass: CourierMailAccount
-		uid: $user
-		sn: $(echo $full_user_name | sed 's/^.* //')
-		cn: $full_user_name
-		mail: $mail
+		uid: $admin_user
+		sn: $(echo $admin_real_name | sed 's/^.* //')
+		cn: $admin_real_name
+		mail: $admin_mail
 		maildrop: root
 		maildrop: postmaster
 		maildrop: webmaster
 		maildrop: abuse
 		maildrop: ca
 		# The homeDirectory attribute is required by the schema, but we leave
-		# it empty since we are going to use $vmailhome as the uniform base
+		# it empty since we are going to use $vmail_dir as the uniform base
 		# for all accounts.
 		homeDirectory: 
 		EOF
 	ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// \
-		-s "$pw" "uid=$user,$ldapusersDN"
+		-s "$admin_pass" "uid=$admin_user,$ldapusersDN"
 else
-	message "User $user already has an LDAP entry under $ldapusersDN."
+	message "User $admin_user already has an LDAP entry under $ldapusersDN."
 fi
 
-message "Adding/replacing LDAP entries for the Dovecot and Postfix proxy users..."
+message "Adding/replacing LDAP entries for the Dovecot and Postfix control users..."
 ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
-	dn: $postfixDN
+	dn: $postfix_ldap_user
 	changetype: delete
 
-	dn: $dovecotDN
+	dn: $dovecot_ldap_user
 	changetype: delete
 
-	dn: $hordeDN
+	dn: $horde_ldap_user
+	changetype: delete
+
+	dn: $owncloud_ldap_user
 	changetype: delete
 
 	# ldapadd will complain if $ldapauth exists already, but we don't care
@@ -712,34 +730,42 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	ou: auth
 	objectClass: organizationalUnit
 
-	# Add updated entries for Postfix, Dovecot, and Horde
-	dn: $postfixDN
+	dn: $postfix_ldap_user
 	changetype: add
 	objectClass: organizationalRole
 	objectClass: simpleSecurityObject
 	cn: postfix
 	userPassword:
-	description: Postfix proxy user
+	description: Postfix control user
 	
-	dn: $dovecotDN
+	dn: $dovecot_ldap_user
 	changetype: add
 	objectClass: organizationalRole
 	objectClass: simpleSecurityObject
 	cn: dovecot
 	userPassword:
-	description: Dovecot proxy user
+	description: Dovecot control user
 	
-	dn: $hordeDN
+	dn: $horde_ldap_user
 	changetype: add
 	objectClass: organizationalRole
 	objectClass: simpleSecurityObject
 	cn: horde
 	userPassword:
-	description: Horde proxy user
+	description: Horde control user
+	
+	dn: $owncloud_ldap_user
+	changetype: add
+	objectClass: organizationalRole
+	objectClass: simpleSecurityObject
+	cn: owncloud
+	userPassword:
+	description: OwnCloud control user
 	EOF
-ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$postfix_ldap_pw" "$postfixDN"
-ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$dovecot_ldap_pw" "$dovecotDN"
-ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$horde_ldap_pw"   "$hordeDN"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$postfix_pass" "$postfix_ldap_user"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$dovecot_pass" "$dovecot_ldap_user"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$horde_pass"   "$horde_ldap_user"
+ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$owncloud_pass"   "$owncloud_ldap_user"
 
 
 # ######################################################################
@@ -837,8 +863,8 @@ if [[ ! -a $postfix_base/postfix-ldap-aliases.cf ]]; then
 		server_host = ldapi:///
 
 		bind = yes
-		bind_dn = $postfixDN
-		bind_pw = $postfix_ldap_pw
+		bind_dn = $postfix_ldap_user
+		bind_pw = $postfix_pass
 
 		search_base = $ldapusersDN
 
@@ -861,12 +887,11 @@ if [[ ! -a $postfix_base/postfix-ldap-aliases.cf ]]; then
 	# delivery (but Dovecot instead), virtual_maps will never be
 	# consulted in our setup.
 	sudo postconf -e "virtual_alias_maps=proxy:ldap:$postfix_base/postfix-ldap-aliases.cf"
-	restart_postfix=1
 fi
 
 # The Postfix password must be updated, because it was updated in the LDAP
 # entry as well.
-sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_ldap_pw/" $postfix_base/postfix-ldap-aliases.cf
+sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_pass/" $postfix_base/postfix-ldap-aliases.cf
 
 if [[ ! -a $postfix_base/postfix-ldap-local-recipients.cf ]]; then
 	heading "Configuring Postfix to use LDAP maps for local recipient lookup..."
@@ -876,8 +901,8 @@ if [[ ! -a $postfix_base/postfix-ldap-local-recipients.cf ]]; then
 
 		server_host = ldapi:///
 		bind = yes
-		bind_dn = $postfixDN
-		bind_pw = $postfix_ldap_pw
+		bind_dn = $postfix_ldap_user
+		bind_pw = $postfix_pass
 
 		search_base = $ldapusersDN
 		query_filter = (&(objectClass=CourierMailAlias)(|(uid=%u)(mail=%u)(maildrop=%u)))
@@ -887,11 +912,10 @@ if [[ ! -a $postfix_base/postfix-ldap-local-recipients.cf ]]; then
 	sudo chmod 640     $postfix_base/postfix-ldap-local-recipients.cf 
 
 	sudo postconf -e "local_recipient_maps=proxy:ldap:$postfix_base/postfix-ldap-local-recipients.cf"
-	restart_postfix=1
 fi
 # The Postfix password must be updated, because it was updated in the LDAP
 # entry as well.
-sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_ldap_pw/" \
+sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_pass/" \
 	$postfix_base/postfix-ldap-local-recipients.cf
 
 
@@ -903,8 +927,8 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 
 		server_host = ldapi:///
 		bind = yes
-		bind_dn = $postfixDN
-		bind_pw = $postfix_ldap_pw
+		bind_dn = $postfix_ldap_user
+		bind_pw = $postfix_pass
 
 		search_base = $ldapusersDN
 		query_filter = (&(objectClass=CourierMailAlias)(uid=%u))
@@ -916,11 +940,10 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 	sudo postconf -e "canonical_maps = proxy:ldap:$postfix_base/postfix-ldap-canonical-map.cf"
 	sudo postconf -e "canonical_classes = header_recipient, header_sender, envelope_recipient, envelope_sender"
 	sudo postconf -e "local_header_rewrite_clients = static:all"
-	restart_postfix=1
 fi
 # The Postfix password must be updated, because it was updated in the LDAP
 # entry as well.
-sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_ldap_pw/" \
+sudo sed -i -r "s/^(bind_pw =).*$/\1 $postfix_pass/" \
 	$postfix_base/postfix-ldap-canonical-map.cf
 
 
@@ -929,9 +952,8 @@ if [[ -z $(grep dovecot $postfix_base/master.cf) ]]; then
 	backup $postfix_base/master.cf
 	sudo tee -a $postfix_base/master.cf > /dev/null <<EOF
 dovecot   unix  -       n       n       -       -       pipe
-  flags=DRhu user=$vmailuser:$vmailuser argv=/usr/lib/dovecot/deliver -f \${sender} -d \${recipient}
+  flags=DRhu user=$vmail_user:$vmail_user argv=/usr/lib/dovecot/deliver -f \${sender} -d \${recipient}
 EOF
-	restart_postfix=1
 fi
 
 if [[ -z $(grep "local_transport = dovecot" $postfix_main) ]]; then
@@ -940,7 +962,6 @@ if [[ -z $(grep "local_transport = dovecot" $postfix_main) ]]; then
 	sudo postconf -e "local_transport = dovecot"
 	# Comment out the mailbox_command directive:
 	sudo sed -i 's/^mailbox_command/#&/' $postfix_main
-	restart_postfix=1
 fi
 
 # Require fully qualified HELO -- this requirement (though RFC2821 conformant)
@@ -1005,12 +1026,11 @@ sudo tee $postfix_base/bogus_mx >/dev/null <<-EOF
 # The following sed command will adjust the mode, user, and group directives
 # for auth-userdb.
 if [[ $(grep -Pzo "auth-userdb.*\N\s*?#mode" $dovecot_confd/10-master.conf) ]]; then
-	heading "Adjusting permissions of  Dovecot's auth-userdb socket..."
+	heading "Adjusting permissions of Dovecot's auth-userdb socket..."
 	sudo sed -i -r "/auth-userdb \{/,/}/ { \
 		s/^(\s*)#mode = 0600.*$/\1mode = 0660/; \
-		s/^(\s*)#user =.*$/\1user = $vmailuser/; \
-		s/^(\s*)#group =.*$/\1group = $vmailuser/ ;}" $dovecot_confd/10-master.conf
-	restart_dovecot=1
+		s/^(\s*)#user =.*$/\1user = $vmail_user/; \
+		s/^(\s*)#group =.*$/\1group = $vmail_user/ ;}" $dovecot_confd/10-master.conf
 else
 	message "Dovecot's auth-userdb socket permissions already adjusted."
 fi
@@ -1032,12 +1052,12 @@ passdb {
 
 userdb {
  driver = static
- args = uid=$vmailuser gid=$vmailuser home=$vmailhome/%Ln
+ args = uid=$vmail_user gid=$vmail_user home=$vmail_dir/%Ln
 }
 EOF
 	sudo sed -i -r 's/^#?(!include auth)/#\1/'           10-auth.conf
 	sudo sed -i -r 's/^#(!include auth-ldap)/\1/'        10-auth.conf
-	sudo sed -i -r "s/^#?(mail_.id =).*$/\1 $vmailuser/" 10-mail.conf
+	sudo sed -i -r "s/^#?(mail_.id =).*$/\1 $vmail_user/" 10-mail.conf
 	cd $dovecot_base
 	backup dovecot-ldap.conf.ext
 	sudo tee dovecot-ldap.conf.ext >/dev/null <<-EOF
@@ -1045,8 +1065,8 @@ EOF
 		# See $homepage
 		# $(date --rfc-3339=seconds)
 		uris = ldapi:///
-		dn = $dovecotDN
-		dnpass = $dovecot_ldap_pw
+		dn = $dovecot_ldap_user
+		dnpass = $dovecot_pass
 
 		#sasl_bind = yes
 		#sasl_mech =
@@ -1079,26 +1099,25 @@ EOF
 		EOF
 	sudo chmod 600 dovecot-ldap.conf.ext
 	popd
-	restart_dovecot=1
 else
 	heading "Dovecot custom configuration already present."
 fi
 
 # The Dovecot password must be updated, because it was updated in the LDAP
 # entry as well.
-sudo sed -i -r "s/^(dnpass =).*$/\1 $dovecot_ldap_pw/" $dovecot_base/dovecot-ldap.conf.ext
+sudo sed -i -r "s/^(dnpass =).*$/\1 $dovecot_pass/" $dovecot_base/dovecot-ldap.conf.ext
 
 # Add the vmail user.
 # No need to make individual user's directories as Dovecot will
 # take care of this.
-if [[ -z $(id $vmailuser) ]]; then
+if [[ -z $(id $vmail_user) ]]; then
 	heading "Adding vmail user..."
-	sudo adduser --system --home $vmailhome --uid 5000 --group $vmailuser
+	sudo adduser --system --home $vmail_dir --uid 5000 --group $vmail_user
 else
-	heading "User $vmailuser already exists."
+	heading "User $vmail_user already exists."
 fi
-sudo chown $vmailuser:$vmailuser $vmailhome
-sudo chmod -R 750 $vmailhome
+sudo chown $vmail_user:$vmail_user $vmail_dir
+sudo chmod -R 750 $vmail_dir
 
 # Configure SSL/TLS for the mail suite
 heading "Updating SSL certificate paths..."
@@ -1138,8 +1157,8 @@ if [[ ! -d $horde_dir ]]; then
 
         message "When prompted, enter the following information:"
         message "- Database name:     $horde_database"
-        message "- Database user:     $horde_user"
-        message "- Database password: $horde_mysql_pw"
+        message "- Database user:     $horde_mysql_user"
+        message "- Database password: $horde_pass"
         message "Note that a configuration will be written later on that also contains"
         message "this information. The horde installer needs the credentials to create"
         message "the database tables."
@@ -1151,7 +1170,7 @@ fi
 
 # Adjust horde configuration
 heading "Adjusting horde configuration..."
-# sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_ldap_pw';/" $horde_dir/config/conf.php
+# sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_pass';/" $horde_dir/config/conf.php
 
 # Extract the local horde's secret key
 horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' /$horde_dir/config/conf.php`
@@ -1179,8 +1198,8 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['session']['timeout'] = 0;
 	\$conf['cookie']['domain'] = \$_SERVER['SERVER_NAME'];
 	\$conf['cookie']['path'] = '/';
-	\$conf['sql']['username'] = '$horde_user';
-	\$conf['sql']['password'] = '$horde_mysql_pw';
+	\$conf['sql']['username'] = '$horde_mysql_user';
+	\$conf['sql']['password'] = '$horde_pass';
 	\$conf['sql']['protocol'] = 'unix';
 	\$conf['sql']['database'] = '$horde_database';
 	\$conf['sql']['charset'] = 'utf-8';
@@ -1190,11 +1209,11 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['ldap']['hostspec'] = 'localhost';
 	\$conf['ldap']['tls'] = false;
 	\$conf['ldap']['version'] = 3;
-	\$conf['ldap']['binddn'] = '$hordeDN';
-	\$conf['ldap']['bindpw'] = '$horde_ldap_pw';
+	\$conf['ldap']['binddn'] = '$horde_ldap_user';
+	\$conf['ldap']['bindpw'] = '$horde_pass';
 	\$conf['ldap']['bindas'] = 'admin';
 	\$conf['ldap']['useldap'] = true;
-	\$conf['auth']['admins'] = array('$user');
+	\$conf['auth']['admins'] = array('$admin_user');
 	\$conf['auth']['checkip'] = true;
 	\$conf['auth']['checkbrowser'] = true;
 	\$conf['auth']['resetpassword'] = true;
@@ -1328,7 +1347,7 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 
 if [[ -z $(grep horde-alarms /etc/crontab) ]]; then
 	heading "Adding horde-alarms to system-wide crontab..."
-	sudo tee -a > /etc/crontab <<-EOF
+	sudo tee -a /etc/crontab <<-EOF
 		# Horde-alarms added by $0
 		*/5 * * * *	www-data	/usr/bin/horde-alarms
 	EOF
@@ -1337,8 +1356,7 @@ else
 fi
 
 if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
-	horde_fqdn=$horde_subdomain.$server_fqdn
-	heading "Configuring Horde subdomain ($horde_subdomain.$server_fqdn) for Apache..."
+	heading "Configuring Horde subdomain ($horde_fqdn) for Apache..."
 	sudo tee /etc/apache2/sites-available/horde.conf > /dev/null <<EOF
 <IfModule mod_ssl.c>
 <VirtualHost *:80>
@@ -1361,8 +1379,8 @@ if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 	CustomLog \${APACHE_LOG_DIR}/horde-access.log combined
 
 	SSLEngine on
-	SSLCertificateFile    /etc/ssl/certs/$horde_fqdn.pem
-	SSLCertificateKeyFile /etc/ssl/private/$horde_fqdn.key
+	SSLCertificateFile    /etc/ssl/certs/${horde_fqdn}.pem
+	SSLCertificateKeyFile /etc/ssl/private/${horde_fqdn}.key
 
 	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
 	<FilesMatch "\.(cgi|shtml|phtml|php)$">
@@ -1379,13 +1397,11 @@ if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 </IfModule>
 EOF
 	sudo a2ensite horde
-	restart_apache=1
 else
 	heading "Horde subdomain for apache already configured."
 fi
 
 if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
-	owncloud_fqdn=$owncloud_subdomain.$server_fqdn
 	heading "Configuring OwnCloud subdomain ($owncloud_fqdn) for Apache..."
 	sudo tee /etc/apache2/sites-available/owncloud.conf > /dev/null <<EOF
 <IfModule mod_ssl.c>
@@ -1427,9 +1443,8 @@ if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
 </IfModule>
 EOF
 	sudo a2ensite owncloud
-	restart_apache=1
 else
-	heading "OwnCloud subdomain ($owncloud_subdomain.$server_fqdn) for Apache already configured."
+	heading "OwnCloud subdomain ($owncloud_fqdn) for Apache already configured."
 fi
 sudo a2enmod ssl rewrite
 
@@ -1443,7 +1458,6 @@ if [[ $(grep -i "snakeoil" $default_ssl_conf) ]]; then
 	sudo sed -i -r 's_^(\s*SSLCertificateKeyFile\s+).*$_\1/etc/ssl/private/'$server_fqdn'.key_' \
 		$default_ssl_conf
 	sudo a2ensite default-ssl.conf
-	restart_apache=1
 else
 	message "Default SSL host already configured to use our own certificate."
 fi
@@ -1453,22 +1467,42 @@ fi
 # Finish up
 # #######################################################################
 
-# Lastly, restart Postfix and Dovecot
-if (( restart_postfix+restart_dovecot+restart_apache )); then 
-	heading "Restarting services..."
-fi
-if (( restart_postfix )); then sudo service postfix restart; fi
-if (( restart_dovecot )); then sudo service dovecot restart; fi
-if (( restart_apache )); then sudo service apache2 restart; fi
+heading "Restarting services..."
+sudo postfix reload
+sudo service dovecot restart
+sudo service apache2 restart
 
 # Multi-line variable: see http://stackoverflow.com/a/1655389/270712
 read -r -d '' pwmsg <<EOF
-MySQL user names and passwords for applications:
-- Horde: $horde_user --> $horde_mysql_pw
-- OwnCloud: $owncloud_user --> $owncloud_mysql_pw
+Control users have been set up in MySQL and OpenLDAP for Horde, OwnCloud,
+Postfix, and Dovecot.  They share the same passwords.  Please make a note of
+these passwords somewhere safe, then delete this information.
+
+$(printf "%-11s %-10s %-38s %s" "Application" "MySQL user" "LDAP user" "Password")
+$(printf "%-11s %-10s %-38s %s" "-----------" "----------" "---------" "--------")
+$(printf "%-11s %-10s %-38s %s" "Horde" "$horde_mysql_user" "$horde_ldap_user" "$horde_pass")
+$(printf "%-11s %-10s %-38s %s" "OwnCloud" "$owncloud_mysql_user" "$owncloud_ldap_user" "$owncloud_pass")
+$(printf "%-11s %-10s %-38s %s" "Dovecot" "n/a" "$dovecot_ldap_user" "$dovecot_pass")
+$(printf "%-11s %-10s %-38s %s" "Postfix" "n/a" "$postfix_ldap_user" "$postfix_pass")
+
+
+These are the fingerprints of the SSL certificates:
+
+$server_fqdn
+	/etc/ssl/certs/${server_fqdn}.pem
+	$(get_fingerprint $server_fqdn)
+$horde_fqdn
+	/etc/ssl/certs/${horde_fqdn}.pem
+	$(get_fingerprint $horde_fqdn)
+$owncloud_fqdn
+	/etc/ssl/certs/${owncloud_fqdn}.pem
+	$(get_fingerprint $owncloud_fqdn)
+Dovecot IMAP server
+	/etc/ssl/certs/dovecot.pem
+	$(get_fingerprint dovecot)
 EOF
 
-infofile=mysql-passwords
+infofile=readme-configure-server
 echo "$pwmsg" > ~/$infofile
 echo -e "\nThis file was generated by $0." >> ~/$infofile
 
@@ -1479,28 +1513,44 @@ the configure-server script has finished setting up the server at $server_fqdn.
 
 Script command line: $0
 
-Horde has been set up at address http://$horde_subdomain.$server_fqdn
+$pwmsg
 
-An Apache virtual host for OwnCloud has been set up at http://$owncloud_subdomain.$server_fqdn
+
+Horde
+-----
+
+Horde has been set up at address http://$horde_fqdn
+
+
+OwnCloud
+--------
+
+An Apache virtual host for OwnCloud has been set up at http://$owncloud_fqdn
 However, OwnCloud has not been automatically installed. To install, download
-the server package from http://owncloud.org, extract it into ${owncloud_dir%owncloud}
-(sudo tar xjf owncloud-x.y.z.tar.bz2 -C ${owncloud_dir%owncloud}),
+the server package from http://owncloud.org, extract it into ${owncloud_dir%/owncloud}
+(sudo tar xjf owncloud-x.y.z.tar.bz2 -C ${owncloud_dir%/owncloud}),
 and change the ownership for Apache (sudo chown -R www-data $owncloud_dir).
 
-$pwmsg
+To configure OwnCloud to user the LDAP directory for user management, enter the
+OwnCloud LDAP user credentials (see above) in the OwnCloud LDAP form, and make
+it look under \`$ldapusersDN\` for \`inetOrgPerson\` entries. See the
+OwnCloud administrator's manual for details.
+
 
 -- 
 $homepage
 EOF
 
 heading "Finished."
-echo "Please make a note of the following information:"
 echo "$pwmsg"
-echo <<-EOF
-	This information has also been stored in ~/$infofile, and it was mailed
-	to you. Please delete this file and the e-mail once you have written down the
-	passwords somewhere.
+cat <<-EOF
+
+
+	This information has also been stored in ~/$infofile, and it was mailed to
+	you.  Please delete both this file and the e-mail once you have memorized the
+	information.
+
 	$homepage
 EOF
 
-# vim: fo+=ro ts=2 sw=2 noet
+# vim: fo+=ro ts=2 sw=2 noet nowrap
