@@ -1326,6 +1326,16 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 	\$servers['imap']['hordeauth'] = true;
 	EOF
 
+if [[ -z $(grep horde-alarms /etc/crontab) ]]; then
+	heading "Adding horde-alarms to system-wide crontab..."
+	sudo tee -a > /etc/crontab <<-EOF
+		# Horde-alarms added by $0
+		*/5 * * * *	www-data	/usr/bin/horde-alarms
+	EOF
+else
+	heading "Crontab already contains horde-alarms."
+fi
+
 if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 	horde_fqdn=$horde_subdomain.$server_fqdn
 	heading "Configuring Horde subdomain ($horde_subdomain.$server_fqdn) for Apache..."
