@@ -1548,6 +1548,14 @@ OwnCloud LDAP user credentials (see above) in the OwnCloud LDAP form, and make
 it look under \`$ldapusersDN\` for \`inetOrgPerson\` entries. See the
 OwnCloud administrator's manual for details.
 
+*Please note:* If you are going to configure OwnCloud to look up users in the
+LDAP directory, the 'admin user' that is created by the configure-server script
+needs to be given administrator rights via OwnCloud's user management page.
+You may want to give the initial OwnCloud user a special name since you won't
+need this initial user to log in to OwnCloud very often.  If you log in to
+OwnCloud with the admin user from the LDAP directory, you can delete the
+initial OwnCloud user (provided the admin user from the LDAP directory was
+given admin rights by the initial OwnCloud user first).
 
 -- 
 $homepage
