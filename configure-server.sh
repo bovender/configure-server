@@ -1469,6 +1469,20 @@ sudo sed -i -r 's/(\s*.dbuser\s+=>\s+).*$/\1'"'$owncloud_mysql_user',/" \
 sudo sed -i -r 's/(\s*.dbpassword.\s+=>\s+).*$/\1'"'$owncloud_pass',/" \
 	/var/owncloud/config/config.php
 
+# Remove the default Apache2 page and turn Indexes off
+sudo sed -i -r 's/^(\s*Options.+)(Indexes ?)(.*)$/\1\3/' /etc/apache2/apache2.conf
+
+INDEX_HTML=/var/www/html/index.html
+if [[ -e $INDEX_HTML ]]; then
+	DEFAULT_SITE_ORIG=$(sha1sum /usr/share/apache2/default-site/index.html | awk '{print $1}')
+	DEFAULT_SITE_CURR=$(sha1sum $INDEX_HTML | awk '{print $1}')
+	if [[ $DEFAULT_SITE_CURR -eq $DEFAULT_SITE_ORIG ]]; then
+		heading "Removing default Apache page..."
+		sudo rm $INDEX_HTML
+	fi
+fi
+
+
 # #######################################################################
 # Finish up
 # #######################################################################
