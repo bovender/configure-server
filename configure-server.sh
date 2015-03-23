@@ -3,7 +3,7 @@
 # #######################################################################
 # Configure-server.sh
 # Script to configure a Ubuntu (or Debian) server.
-# (c) Daniel Kraus (bovender) 2012-2014
+# (c) Daniel Kraus (bovender) 2012-2015
 # MIT license.
 #
 # !!! USE AT YOUR OWN RISK !!!
