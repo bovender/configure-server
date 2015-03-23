@@ -1463,6 +1463,12 @@ else
 fi
 
 
+heading "Update OwnCloud config (if exists) with current database password..."
+sudo sed -i -r 's/(\s*.dbuser\s+=>\s+).*$/\1'"'$owncloud_mysql_user',/" \
+	/var/owncloud/config/config.php
+sudo sed -i -r 's/(\s*.dbpassword.\s+=>\s+).*$/\1'"'$owncloud_pass',/" \
+	/var/owncloud/config/config.php
+
 # #######################################################################
 # Finish up
 # #######################################################################
