@@ -698,6 +698,7 @@ then
 		maildrop: webmaster
 		maildrop: abuse
 		maildrop: ca
+		maildrop: www-data
 		# The homeDirectory attribute is required by the schema, but we leave
 		# it empty since we are going to use $vmail_dir as the uniform base
 		# for all accounts.
