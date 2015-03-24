@@ -452,7 +452,7 @@ owncloud_pass=$($password_cmd)
 # Configure SSH
 if [[ -n $(grep -i "^AllowUsers $USER" /etc/ssh/sshd_config) ]]; then
 	heading "Configuring SSH to allow only $USER to log in."
-	sudo sed -ir '/^AllowUsers/ d; s/^(PermitRootLogin\s*).*$/\1no/' /etc/ssh/sshd_config
+	sudo sed -i -r '/^AllowUsers/ d; s/^(PermitRootLogin\s*).*$/\1no/' /etc/ssh/sshd_config
 	sudo tee -a /etc/ssh/sshd_config >/dev/null <<-EOF
 		AllowUsers $USER
 		EOF
