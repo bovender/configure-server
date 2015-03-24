@@ -1148,6 +1148,7 @@ fi
 
 if [[ ! -d $horde_dir ]]; then
 	heading "Installing Horde..."
+	sudo pear upgrade PEAR
 	sudo pear channel-discover pear.horde.org
 	sudo pear install horde/horde_role
 	sudo pear run-scripts horde/horde_role
@@ -1155,13 +1156,13 @@ if [[ ! -d $horde_dir ]]; then
 	sudo pear install horde/Horde_Ldap
 	sudo pear install horde/Horde_Memcache
 
-        message "When prompted, enter the following information:"
-        message "- Database name:     $horde_database"
-        message "- Database user:     $horde_mysql_user"
-        message "- Database password: $horde_pass"
-        message "Note that a configuration will be written later on that also contains"
-        message "this information. The horde installer needs the credentials to create"
-        message "the database tables."
+	message "When prompted, enter the following information:"
+	message "- Database name:     $horde_database"
+	message "- Database user:     $horde_mysql_user"
+	message "- Database password: $horde_pass"
+	message "Note that a configuration will be written later on that also contains"
+	message "this information. The horde installer needs the credentials to create"
+	message "the database tables."
 	sudo webmail-install
 	sudo chown www-data:www-data $horde_dir
 else
