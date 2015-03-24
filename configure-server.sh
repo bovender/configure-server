@@ -1180,12 +1180,12 @@ horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' /$horde_dir/config/conf
 sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	<?php
 	/* CONFIG START. DO NOT CHANGE ANYTHING IN OR AFTER THIS LINE. */
-	// $Id: 7132f71317ff8b99212d581514435cc9765c7a9e $
+	// \$Id: 41a4cec5f53fb2d327c8ed9e1c6cfd330a6b7217 \$
 	\$conf['vhosts'] = false;
 	\$conf['debug_level'] = E_ALL & ~E_NOTICE;
 	\$conf['max_exec_time'] = 0;
 	\$conf['compress_pages'] = true;
-	\$conf['secret_key'] = '$horde_secret_key';
+	\$conf['secret_key'] = 'HV7FQKsebLS3Ds2bZ99YEc7FpwpeiFcEP48cXUAGquqpEMwe9NU85Ct8mMbFSnj4';
 	\$conf['umask'] = 077;
 	\$conf['testdisable'] = true;
 	\$conf['use_ssl'] = 2;
@@ -1196,8 +1196,9 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['safe_ips'] = array();
 	\$conf['session']['name'] = 'Horde';
 	\$conf['session']['use_only_cookies'] = true;
-	\$conf['session']['cache_limiter'] = 'nocache';
 	\$conf['session']['timeout'] = 0;
+	\$conf['session']['cache_limiter'] = 'nocache';
+	\$conf['session']['max_time'] = 604800;
 	\$conf['cookie']['domain'] = \$_SERVER['SERVER_NAME'];
 	\$conf['cookie']['path'] = '/';
 	\$conf['sql']['username'] = '$horde_mysql_user';
@@ -1208,8 +1209,10 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['sql']['ssl'] = true;
 	\$conf['sql']['splitread'] = false;
 	\$conf['sql']['phptype'] = 'mysqli';
-	\$conf['ldap']['hostspec'] = 'localhost';
+	\$conf['nosql']['phptype'] = false;
+	\$conf['ldap']['hostspec'] = array('localhost');
 	\$conf['ldap']['tls'] = false;
+	\$conf['ldap']['timeout'] = 5;
 	\$conf['ldap']['version'] = 3;
 	\$conf['ldap']['binddn'] = '$horde_ldap_user';
 	\$conf['ldap']['bindpw'] = '$horde_pass';
@@ -1227,7 +1230,6 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['auth']['params']['ad'] = false;
 	\$conf['auth']['params']['uid'] = 'uid';
 	\$conf['auth']['params']['encryption'] = 'ssha';
-	# \$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson', 'CourierMailAccount', 'CourierMailAlias');
 	\$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson');
 	\$conf['auth']['params']['filter'] = '(objectclass=inetOrgPerson)';
 	\$conf['auth']['params']['password_expiration'] = 'no';
@@ -1237,22 +1239,19 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['auth']['params']['login_block'] = false;
 	\$conf['auth']['params']['login_block_count'] = 5;
 	\$conf['auth']['params']['login_block_time'] = 5;
-	\$conf['signup']['params']['driverconfig'] = 'horde';
-	\$conf['signup']['driver'] = 'Sql';
-	\$conf['signup']['approve'] = true;
-	\$conf['signup']['allow'] = true;
+	\$conf['signup']['allow'] = false;
 	\$conf['log']['priority'] = 'WARNING';
 	\$conf['log']['ident'] = 'HORDE';
 	\$conf['log']['name'] = LOG_USER;
 	\$conf['log']['type'] = 'syslog';
 	\$conf['log']['enabled'] = true;
 	\$conf['log_accesskeys'] = false;
+	\$conf['prefs']['maxsize'] = 65535;
 	\$conf['prefs']['params']['driverconfig'] = 'horde';
 	\$conf['prefs']['driver'] = 'Sql';
 	\$conf['alarms']['params']['driverconfig'] = 'horde';
 	\$conf['alarms']['params']['ttl'] = 300;
 	\$conf['alarms']['driver'] = 'Sql';
-	\$conf['datatree']['driver'] = 'null';
 	\$conf['group']['driverconfig'] = 'horde';
 	\$conf['group']['driver'] = 'Sql';
 	\$conf['perms']['driverconfig'] = 'horde';
@@ -1267,30 +1266,35 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['cache']['default_lifetime'] = 86400;
 	\$conf['cache']['params']['sub'] = 0;
 	\$conf['cache']['driver'] = 'File';
-	\$conf['cache']['compress'] = true;
-	\$conf['cache']['use_memorycache'] = 'Memcache';
+	\$conf['cache']['use_memorycache'] = '';
 	\$conf['cachecssparams']['driver'] = 'filesystem';
+	\$conf['cachecssparams']['filemtime'] = false;
 	\$conf['cachecssparams']['lifetime'] = 86400;
-	\$conf['cachecssparams']['compress'] = 'php';
-	\$conf['cachecss'] = false;
+	\$conf['cachecss'] = true;
 	\$conf['cachejsparams']['driver'] = 'filesystem';
 	\$conf['cachejsparams']['compress'] = 'php';
 	\$conf['cachejsparams']['lifetime'] = 86400;
-	\$conf['cachejs'] = false;
+	\$conf['cachejs'] = true;
 	\$conf['cachethemesparams']['check'] = 'appversion';
 	\$conf['cachethemesparams']['lifetime'] = 604800;
-	\$conf['cachethemes'] = false;
+	\$conf['cachethemes'] = true;
 	\$conf['lock']['params']['driverconfig'] = 'horde';
 	\$conf['lock']['driver'] = 'Sql';
 	\$conf['token']['params']['driverconfig'] = 'horde';
 	\$conf['token']['driver'] = 'Sql';
+	\$conf['history']['params']['driverconfig'] = 'horde';
+	\$conf['history']['driver'] = 'Sql';
+	\$conf['davstorage']['params']['driverconfig'] = 'horde';
+	\$conf['davstorage']['driver'] = 'Sql';
+	\$conf['mailer']['params']['port'] = 587;
+	\$conf['mailer']['params']['secure'] = 'tls';
 	\$conf['mailer']['params']['auth'] = false;
+	\$conf['mailer']['params']['lmtp'] = false;
 	\$conf['mailer']['type'] = 'smtp';
-	\$conf['mailformat']['brokenrfc2231'] = false;
 	\$conf['vfs']['params']['driverconfig'] = 'horde';
 	\$conf['vfs']['type'] = 'Sql';
 	\$conf['sessionhandler']['type'] = 'Builtin';
-	\$conf['sessionhandler']['memcache'] = false;
+	\$conf['sessionhandler']['hashtable'] = false;
 	\$conf['spell']['params']['path'] = '/usr/bin/aspell';
 	\$conf['spell']['driver'] = 'aspell';
 	\$conf['gnupg']['keyserver'] = array('pool.sks-keyservers.net');
@@ -1301,12 +1305,11 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['image']['driver'] = 'Imagick';
 	\$conf['exif']['params']['exiftool'] = '/usr/bin/exiftool';
 	\$conf['exif']['driver'] = 'Exiftool';
+	\$conf['timezone']['location'] = 'ftp://ftp.iana.org/tz/tzdata-latest.tar.gz';
 	\$conf['problems']['email'] = 'webmaster@$server_fqdn';
 	\$conf['problems']['maildomain'] = '$server_fqdn';
 	\$conf['problems']['tickets'] = false;
 	\$conf['problems']['attachments'] = true;
-	\$conf['menu']['apps'] = array();
-	\$conf['menu']['always'] = false;
 	\$conf['menu']['links']['help'] = 'all';
 	\$conf['menu']['links']['prefs'] = 'authenticated';
 	\$conf['menu']['links']['problem'] = 'all';
@@ -1324,21 +1327,14 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['facebook']['enabled'] = false;
 	\$conf['twitter']['enabled'] = false;
 	\$conf['urlshortener'] = 'TinyUrl';
-	\$conf['weather']['params']['lifetime'] = 21600;
-	\$conf['weather']['provider'] = 'Google';
+	\$conf['weather']['provider'] = false;
+	\$conf['imap']['enabled'] = false;
 	\$conf['imsp']['enabled'] = false;
 	\$conf['kolab']['enabled'] = false;
-	\$conf['memcache']['hostspec'] = array('localhost');
-	\$conf['memcache']['port'] = array('11211');
-	\$conf['memcache']['weight'] = array();
-	\$conf['memcache']['persistent'] = false;
-	\$conf['memcache']['compression'] = false;
-	\$conf['memcache']['large_items'] = true;
-	\$conf['memcache']['enabled'] = true;
+	\$conf['hashtable']['driver'] = 'none';
 	\$conf['activesync']['enabled'] = false;
 	/* CONFIG END. DO NOT CHANGE ANYTHING IN OR BEFORE THIS LINE. */
 	EOF
-
 
 # Enable Horde's mail module IMP to authenticate with the IMAP server
 # using the credentials provided to horde
