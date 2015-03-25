@@ -73,6 +73,8 @@ dovecot_confd=$dovecot_base/conf.d
 ldapbaseDN="dc=$domain,dc=$tld"
 ldapusersDN="ou=users,$ldapbaseDN"
 ldapauthDN="ou=auth,$ldapbaseDN"
+ldapSharedDN="ou=shared,$ldapbaseDN"
+ldapAddressbookDN="ou=contacts,$ldapSharedDN"
 adminDN="cn=admin,$ldapbaseDN"
 pwhash="{SSHA}"
 
@@ -582,6 +584,16 @@ olcAccess: to attrs=uid,mail,maildrop
  by users read 
  by dn=$postfix_ldap_user read 
  by * read
+# Personal address book
+olcAccess: to dn.regex="ou=contacts,uid=([^,]+),$ldapusersDN$" 
+ by dn.exact,expand="uid=\$1,$ldapusersDN" write 
+ by dn=$adminDN manage 
+ by users none
+# Shared address book
+olcAccess: to dn.subtree="$ldapAddressbookDN" 
+ by dn=$adminDN manage 
+ by dn=$horde_ldap_user write 
+ by users write
 # An owner of an entry may modify it (and so may the admin);
 # deny read access to non-authenticated entities
 olcAccess: to * 
@@ -727,7 +739,11 @@ then
 		# The homeDirectory attribute is required by the schema, but we leave
 		# it empty since we are going to use $vmail_dir as the uniform base
 		# for all accounts.
-		homeDirectory: 
+		homeDirectory: /dev/null
+
+		dn: ou=contacts,uid=$admin_user,$ldapusersDN
+		ou: contacts
+		objectClass: organizationalUnit
 		EOF
 	ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// \
 		-s "$admin_pass" "uid=$admin_user,$ldapusersDN"
@@ -787,6 +803,16 @@ ldapadd -c -x -w $ldap_admin_pw -D "$adminDN" <<-EOF
 	cn: owncloud
 	userPassword:
 	description: OwnCloud control user
+
+	dn: $ldapSharedDN
+	changetype: add
+	ou: shared
+	objectClass: organizationalUnit
+
+	dn: $ldapAddressbookDN
+	changetype: add
+	ou: contacts
+	objectClass: organizationalUnit
 	EOF
 ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$postfix_pass" "$postfix_ldap_user"
 ldappasswd -x -w $ldap_admin_pw -D "$adminDN" -H ldapi:/// -s "$dovecot_pass" "$dovecot_ldap_user"
@@ -1383,6 +1409,43 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 # else
 # 	heading "Crontab already contains horde-alarms."
 # fi
+
+heading "Configuring Horde address books..."
+turba_backends_local="$horde_dir/turba/config/backends.local.php"
+if [[ -z $(grep configure-server "$turba_backends_local" 2>/dev/null) ]]; then
+	if [[ ! -e $turba_backends_local ]]; then
+		sudo tee  "$turba_backends_local" >/dev/null <<-EOF
+		<?php
+		EOF
+	fi
+	sudo tee -a "$turba_backends_local" >/dev/null <<-EOF
+	# Address books added by configure-server
+
+	# Turn off MySQL-based address books
+	\$cfgSources['localsql']['disabled'] = true;
+
+	\$_ldap_uid = \$GLOBALS['registry']->getAuth('bare');
+
+	# Configure shared LDAP address book
+	\$cfgSources['localldap']['disabled'] = false;
+	\$cfgSources['localldap']['title'] = _("Shared Address Book (LDAP)");
+	\$cfgSources['localldap']['params']['server'] = 'localhost';
+	\$cfgSources['localldap']['params']['root'] = '$ldapAddressbookDN';
+	\$cfgSources['localldap']['params']['bind_dn'] = 'uid=' . \$_ldap_uid . ',$ldapusersDN';
+	\$cfgSources['localldap']['params']['bind_password'] = \$GLOBALS['registry']->getAuthCredential('password');
+
+	# Use the same mapping for both personal and shared LDAP address books
+	\$cfgSources['localhost']['map'] = \$cfgSources['personal_ldap']['map'];
+
+	# Configure personal LDAP address book
+	\$cfgSources['personal_ldap']['disabled'] = false;
+	\$cfgSources['personal_ldap']['title'] = _('Personal Address Book (LDAP)');
+	\$cfgSources['personal_ldap']['params']['server'] = 'localhost';
+	\$cfgSources['personal_ldap']['params']['root'] = 'ou=contacts,uid=' . \$_ldap_uid . ',$ldapusersDN';
+	\$cfgSources['personal_ldap']['params']['bind_dn'] = 'uid=' . \$_ldap_uid . ',$ldapusersDN';
+	\$cfgSources['personal_ldap']['params']['bind_password'] = \$GLOBALS['registry']->getAuthCredential('password');
+	EOF
+fi
 
 if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 	heading "Configuring Horde subdomain ($horde_fqdn) for Apache..."
