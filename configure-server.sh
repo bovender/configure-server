@@ -654,6 +654,31 @@ else
 	message "slapd logging already configured."
 fi
 
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+	-b "cn=config" "cn=*olcTLSCertificate*" dn 2>/dev/null ) ]]
+then
+	heading "Enabling OpenLDAP TLS/SSL..."
+	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
+#dn: cn=config
+#changetype: modify
+#replace: olcTLSCertificateFile
+#olcTLSCertificateFile: /etc/ssl/certs/${server_fqdn}.pem
+#-
+#replace: olcTLSCertificateKeyFile
+#olcTLSCertificateKeyFile: /etc/ssl/private/${server_fqdn}.key
+#-
+#replace: olcTLSCipherSuite
+#olcTLSCipherSuite: TLSv1+RSA:!EXPORT:!NULL
+#
+dn: cn=config
+changetype: modify
+replace: olcTLSVerifyClient
+olcTLSVerifyClient: never
+EOF
+else
+	message "OpenLDAP TLS/SSL already set up."
+fi
+
 heading "Binding to LDAP directory..."
 echo "For binding to the LDAP directory, please enter the password that you used"
 echo "during installation of this server."
