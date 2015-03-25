@@ -1368,15 +1368,21 @@ sudo tee $horde_dir/imp/config/backends.local.php >/dev/null <<-EOF
 	\$servers['imap']['hordeauth'] = true;
 	EOF
 
-if [[ -z $(grep horde-alarms /etc/crontab) ]]; then
-	heading "Adding horde-alarms to system-wide crontab..."
-	sudo tee -a /etc/crontab <<-EOF
-		# Horde-alarms added by $0
-		*/5 * * * *	www-data	/usr/bin/horde-alarms
-	EOF
-else
-	heading "Crontab already contains horde-alarms."
-fi
+# Horde-alarms does not work properly.
+# One issue is that the directory stored in the PEAR configuration
+# is not correct. While this can be solved by cd'ing to /var/horde/lib
+# in the crontab before executing horde-alarms, the other, bigger
+# issue is that Horde attempts to log into the MySQL server without
+# password if horde-alarms is run from the command line.
+# if [[ -z $(grep horde-alarms /etc/crontab) ]]; then
+# 	heading "Adding horde-alarms to system-wide crontab..."
+# 	sudo tee -a /etc/crontab <<-EOF
+# 		# Horde-alarms added by $0
+# 		*/5 * * * *	www-data	/usr/bin/horde-alarms
+# 	EOF
+# else
+# 	heading "Crontab already contains horde-alarms."
+# fi
 
 if [[ ! -a /etc/apache2/sites-enabled/horde.conf ]]; then
 	heading "Configuring Horde subdomain ($horde_fqdn) for Apache..."
