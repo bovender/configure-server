@@ -651,16 +651,17 @@ fi
 
 if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
 	-b "cn=config" "cn=*olcLog*" dn 2>/dev/null ) ]]
+#if (( 1 ))
 then
 	heading "Enabling slapd logging..."
 	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
 # Note: Logs go to /var/log/syslog; olcLogFile is only used on Windows systems 
 # Log level 'none' does not mean no logging, but comprizes non-categorized
-# messages (see docs!)
+# messages (see docs!. Use 'acl' for ACL logging.)
 dn: cn=config
 changetype: modify
 replace: olcLogLevel
-olcLogLevel: none
+olcLogLevel: stats
 EOF
 else
 	message "slapd logging already configured."
