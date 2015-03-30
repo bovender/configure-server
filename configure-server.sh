@@ -1163,6 +1163,7 @@ popd
 # ######################
 
 if [[ ! $(grep ForceSSL /etc/phpmyadmin/config.inc.php) ]]; then
+	heading "Make phpMyAdmin enforce SSL connections..."
 	echo "\$cfg['ForceSSL']=true;" | \
 		sudo tee -a /etc/phpmyadmin/config.inc.php > /dev/null
 fi
