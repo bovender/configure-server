@@ -1153,8 +1153,10 @@ popd
 pushd /etc/postfix
 sudo sed -i -r 's#(smtpd_tls_cert_file=/etc/ssl/certs/).+$#\1ssl-mail.pem#' main.cf
 sudo sed -i -r 's#(smtpd_tls_key_file=/etc/ssl/private/).+$#\1ssl-mail.key#' main.cf
-popd
 
+heading "Enabling port 587 in Postfix configuration..."
+sudo sed -i -r 's/^#(submission\sinet.+)$/\1/' master.cf
+popd
 
 # ######################
 # PHPmyadmin
