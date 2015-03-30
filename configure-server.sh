@@ -1432,7 +1432,7 @@ class Horde_Hooks
 {
 	private function ldapSearchBase()
 	{
-		return 'ou=users,dc=ubuntu,dc=vbox';
+		return '$ldapusersDN';
 	}
 
 	private function getMailDomain()
