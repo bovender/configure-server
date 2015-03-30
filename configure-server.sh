@@ -633,7 +633,7 @@ then
 dn: cn=config
 changetype: modify
 replace: olcLogLevel
-olcLogLevel: stats
+olcLogLevel: none
 EOF
 else
 	message "slapd logging already configured."
