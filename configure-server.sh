@@ -275,7 +275,7 @@ generate_cert() {
 		default_bits           = 1024
 		default_keyfile        = privkey.pem
 		distinguished_name     = req_distinguished_name
-		x509_extensions        = v3_ca # The extentions to add to the self signed cert
+		x509_extensions        = v3_ca
 		string_mask            = utf8only
 
 		[ req_distinguished_name ]
@@ -294,10 +294,12 @@ generate_cert() {
 		nsComment              = "OpenSSL Generated Certificate"
 		subjectKeyIdentifier   = hash
 		authorityKeyIdentifier = keyid,issuer
+		# Need extended key usage 'serverAuth' to make it work with OpenLDAP!
+		extendedKeyUsage       = serverAuth
 
 		[ v3_req ]
 		basicConstraints       = CA:FALSE
-		keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+		keyUsage               = nonRepudiation, digitalSignature, keyEncipherment
 
 		[ v3_ca ]
 		subjectKeyIdentifier   = hash
@@ -387,6 +389,7 @@ if [ -z "$SSH_CLIENT" ]; then
 			fi
 			if (( $?==0 )); then
 				if [[ -d "$ca_dir" ]]; then
+					heading "External media with 'CA' directory found!"
 					yesno "Generate SSL certificates and copy them to server?" answer y
 					if (( $? )); then 
 						generate_cert *.$domain.$tld
@@ -436,6 +439,14 @@ if [[ $(find . -name '*.pem') ]]; then
 	sudo chown root:root *.key
 	sudo chmod 0400 *.key
 	sudo mv *.key /etc/ssl/private
+	# Special treatment for OpenLDAP certificates
+	pushd /etc/ssl
+	sudo cp certs/$server_fqdn.pem certs/openldap.pem
+	sudo cp private/$server_fqdn.key private/openldap.key
+	sudo adduser openldap ssl-cert
+	sudo chgrp ssl-cert certs/openldap.pem private/openldap.key
+	sudo chmod 440 certs/openldap.pem private/openldap.key
+	popd
 fi
 
 # Install required packages
@@ -621,9 +632,9 @@ else
 	message "LDAP ACLs already configured..."
 fi
 
-if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
-	-b "cn=config" "cn=*olcLog*" dn 2>/dev/null ) ]]
-#if (( 1 ))
+#if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+#	-b "cn=config" "cn=*olcLog*" dn 2>/dev/null ) ]]
+if (( 1 ))
 then
 	heading "Enabling slapd logging..."
 	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
@@ -641,20 +652,18 @@ fi
 
 if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
 	-b "cn=config" "cn=*olcTLSCertificate*" dn 2>/dev/null ) ]]
+#if (( 1 ))
 then
 	heading "Enabling OpenLDAP TLS/SSL..."
 	sudo ldapmodify -Y EXTERNAL -H ldapi:/// -c <<EOF
-#dn: cn=config
-#changetype: modify
-#replace: olcTLSCertificateFile
-#olcTLSCertificateFile: /etc/ssl/certs/${server_fqdn}.pem
-#-
-#replace: olcTLSCertificateKeyFile
-#olcTLSCertificateKeyFile: /etc/ssl/private/${server_fqdn}.key
-#-
-#replace: olcTLSCipherSuite
-#olcTLSCipherSuite: TLSv1+RSA:!EXPORT:!NULL
-#
+dn: cn=config
+changetype: modify
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: /etc/ssl/certs/openldap.pem
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /etc/ssl/private/openldap.key
+
 dn: cn=config
 changetype: modify
 replace: olcTLSVerifyClient
