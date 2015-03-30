@@ -537,6 +537,16 @@ EOF
 #                        |  ou=auth  |                   |  ou=users |
 #                        +-----------+                   +-----------+
 
+# Add misc schema to LDAP directory
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+	-b "cn=schema,cn=config" "cn=*misc*" dn 2>/dev/null ) ]]
+then
+	heading "Adding misc schema to LDAP directory..."
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c -f /etc/ldap/schema/misc.ldif
+else
+	message "Misc schema already imported into LDAP."
+fi
+
 # Check if the LDAP backend database (hdb) already contains an ACL directive
 # for Postfix. If none is found, assume that we need to configure the backend
 # database.
@@ -575,9 +585,9 @@ olcAccess: to attrs=userPassword
  by anonymous auth 
  by self write 
  by * none
-# Only admin may write to the uid, mail, and maildrop fields
-# Postfix can look up these attributes
-olcAccess: to attrs=uid,mail,maildrop 
+# Only admin may write to the uid, mailRoutingAddress, and mailLocalAddress
+# fields; Postfix can look up these attributes
+olcAccess: to attrs=uid,mailRoutingAddress,mailLocalAddress 
  by dn=$adminDN manage 
  by dn=$horde_ldap_user manage 
  by self read 
@@ -609,44 +619,6 @@ olcDbIndex: uid pres
 EOF
 else
 	message "LDAP ACLs already configured..."
-fi
-
-
-# Add courier-authlib-ldap schema:
-# Converted from authldap.schema to cn=config format by D. Kraus, 29-Jul-12
-# See $homepage
-# Original file extracted from:
-# http://de.archive.ubuntu.com/ubuntu/pool/universe/c/courier-authlib/courier-authlib-ldap_0.63.0-4build1_amd64.deb
-# Line breaks were removed on purpose, as strange errors occurred on import.
-# Depends on: nis.schema, which depends on cosine.schema
-if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
-	-b "cn=schema,cn=config" "cn=*authldap*" dn 2>/dev/null ) ]]
-then
-	heading "Adding authldap schema to LDAP directory..."
-	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c <<EOF
-dn: cn=authldap,cn=schema,cn=config
-objectClass: olcSchemaConfig
-cn: authldap
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.1 NAME 'mailbox' DESC 'The absolute path to the mailbox for a mail account in a non-default location' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.2 NAME 'quota' DESC 'A string that represents the quota on a mailbox' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 SINGLE-VALUE )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.3 NAME 'clearPassword' DESC 'A separate text that stores the mail account password in clear text' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{128} )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.4 NAME 'maildrop' DESC 'RFC822 Mailbox - mail alias' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.5 NAME 'mailsource' DESC 'Message source' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.6 NAME 'virtualdomain' DESC 'A mail domain that is mapped to a single mail account' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.7 NAME 'virtualdomainuser' DESC 'Mailbox that receives mail for a mail domain' EQUALITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.8 NAME 'defaultdelivery' DESC 'Default mail delivery instructions' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.9 NAME 'disableimap' DESC 'Set this attribute to 1 to disable IMAP access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.10 NAME 'disablepop3' DESC 'Set this attribute to 1 to disable POP3 access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.11 NAME 'disablewebmail' DESC 'Set this attribute to 1 to disable IMAP access' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.12 NAME 'sharedgroup' DESC 'Virtual shared group' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.13 NAME 'disableshared' DESC 'Set this attribute to 1 to disable shared mailbox usage' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
-olcAttributeTypes: ( 1.3.6.1.4.1.10018.1.1.14 NAME 'mailhost' DESC 'Host to which incoming POP/IMAP connections should be proxied' EQUALITY caseIgnoreIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
-olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.1 NAME 'CourierMailAccount' DESC 'Mail account object as used by the Courier mail server' SUP top AUXILIARY MUST ( mail $ homeDirectory ) MAY ( uidNumber $ gidNumber $ mailbox $ uid $ cn $ gecos $ description $ loginShell $ quota $ userPassword $ clearPassword $ defaultdelivery $ disableimap $ disablepop3 $ disablewebmail $ sharedgroup $ disableshared $ mailhost ) )
-olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.2 NAME 'CourierMailAlias' DESC 'Mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( mail $ maildrop ) MAY ( mailsource $ description ) )
-olcObjectClasses: ( 1.3.6.1.4.1.10018.1.2.3 NAME 'CourierDomainAlias' DESC 'Domain mail aliasing/forwarding entry' SUP top AUXILIARY MUST ( virtualdomain $ virtualdomainuser ) MAY ( mailsource $ description ) )
-EOF
-else
-	message "authldap schema already imported into LDAP."
 fi
 
 if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
@@ -725,22 +697,17 @@ then
 
 		dn: uid=$admin_user,$ldapusersDN
 		objectClass: inetOrgPerson
-		objectClass: CourierMailAlias
-		objectClass: CourierMailAccount
+		objectClass: inetLocalMailRecipient
 		uid: $admin_user
 		sn: $(echo $admin_real_name | sed 's/^.* //')
 		cn: $admin_real_name
-		mail: $admin_mail
-		maildrop: root
-		maildrop: postmaster
-		maildrop: webmaster
-		maildrop: abuse
-		maildrop: ca
-		maildrop: www-data
-		# The homeDirectory attribute is required by the schema, but we leave
-		# it empty since we are going to use $vmail_dir as the uniform base
-		# for all accounts.
-		homeDirectory: /dev/null
+		mailRoutingAddress: $admin_mail
+		mailLocalAddress: root
+		mailLocalAddress: postmaster
+		mailLocalAddress: webmaster
+		mailLocalAddress: abuse
+		mailLocalAddress: ca
+		mailLocalAddress: www-data
 
 		dn: ou=contacts,uid=$admin_user,$ldapusersDN
 		ou: contacts
@@ -923,7 +890,7 @@ if [[ ! -a $postfix_base/postfix-ldap-aliases.cf ]]; then
 
 		# Use the %u parameter to search for the local part of an
 		# email address only. %s would search for the entire string.
-		query_filter = (&(objectClass=CourierMailAlias)(maildrop=%u))
+		query_filter = (&(objectClass=inetLocalMailRecipient)(mailLocalAddress=%u))
 
 		# The result_format uses %u to return the local part of an
 		# address. To use virtual domains, replace %u with %s
@@ -958,7 +925,7 @@ if [[ ! -a $postfix_base/postfix-ldap-local-recipients.cf ]]; then
 		bind_pw = $postfix_pass
 
 		search_base = $ldapusersDN
-		query_filter = (&(objectClass=CourierMailAlias)(|(uid=%u)(mail=%u)(maildrop=%u)))
+		query_filter = (&(objectClass=inetLocalMailRecipient)(|(uid=%u)(mailRoutingAddress=%u)(mailLocalAddress=%u)))
 		result_attribute = uid
 		EOF
 	sudo chgrp postfix $postfix_base/postfix-ldap-local-recipients.cf 
@@ -984,8 +951,8 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 		bind_pw = $postfix_pass
 
 		search_base = $ldapusersDN
-		query_filter = (&(objectClass=CourierMailAlias)(uid=%u))
-		result_attribute = mail
+		query_filter = (&(objectClass=inetLocalMailRecipient)(uid=%u))
+		result_attribute = mailRoutingAddress
 		EOF
 	sudo chgrp postfix $postfix_base/postfix-ldap-canonical-map.cf 
 	sudo chmod 640     $postfix_base/postfix-ldap-canonical-map.cf 
@@ -1140,9 +1107,9 @@ EOF
 
 		# Change %Ln to %u if you want user IDs with domain
 		# Since Postfix rewrites the envelope recipient to the canonical
-		# mail address (mail attribute in LDAP entry), we need to search
-		# for %Ln in 'mail' also.
-		pass_filter = (&(objectClass=inetOrgPerson)(|(uid=%Ln)(mail=%Ln)))
+		# mail address (mailRoutingAddress attribute in LDAP entry), we need to
+		# search for %Ln in 'mailRoutingAddress' also.
+		pass_filter = (&(objectClass=inetOrgPerson)(|(uid=%Ln)(mailRoutingAddress=%Ln)))
 
 		#default_pass_scheme = SSHA
 
@@ -1227,7 +1194,7 @@ heading "Adjusting horde configuration..."
 # sudo sed -i -r "s/^(.conf..ldap....bindpw.*=.).*$/\1'$horde_pass';/" $horde_dir/config/conf.php
 
 # Extract the local horde's secret key
-horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' /$horde_dir/config/conf.php`
+horde_secret_key=`grep -o -E '.{8}-.{4}-.{4}-.{4}-.{12}' $horde_dir/config/conf.php`
 
 sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	<?php
@@ -1282,7 +1249,8 @@ sudo tee $horde_dir/config/conf.php >/dev/null <<-EOF
 	\$conf['auth']['params']['ad'] = false;
 	\$conf['auth']['params']['uid'] = 'uid';
 	\$conf['auth']['params']['encryption'] = 'ssha';
-	\$conf['auth']['params']['newuser_objectclass'] = array('inetOrgPerson');
+	\$conf['auth']['params']['newuser_objectclass'] =
+		array('inetOrgPerson', 'inetLocalMailRecipient');
 	\$conf['auth']['params']['filter'] = '(objectclass=inetOrgPerson)';
 	\$conf['auth']['params']['password_expiration'] = 'no';
 	\$conf['auth']['params']['driverconfig'] = 'horde';
@@ -1451,80 +1419,82 @@ fi
 if [[ ! -e $horde_dir/config/hooks.php ]]
 then
 	heading "Adding Horde hooks..."
-	sudo tee $horde_dir/config/hooks.php >/dev/null <<-EOF
-	<?php
-	class Horde_Hooks
+	sudo tee $horde_dir/config/hooks.php >/dev/null <<EOF
+<?php
+class Horde_Hooks
+{
+	private function ldapSearchBase()
 	{
-		private function ldapSearchBase()
-		{
-			return 'ou=users,dc=ubuntu,dc=vbox';
-		}
+		return 'ou=users,dc=ubuntu,dc=vbox';
+	}
 
-		private function getMailDomain()
-		{
-			preg_match('/dc=([^,]+),dc=(.+)\$/', \$this->ldapSearchBase(), \$matches);
-			return \$matches[1] . "." . \$matches[2];
-		}
+	private function getMailDomain()
+	{
+		preg_match('/dc=([^,]+),dc=(.+)\$/', \$this->ldapSearchBase(), \$matches);
+		return \$matches[1] . "." . \$matches[2];
+	}
 
-		private function bindLdap(\$username)
-		{
-			\$conn = @ldap_connect('ldapi:///', '389');
-			@ldap_set_option(\$conn, LDAP_OPT_PROTOCOL_VERSION, 3);
-			\$pass = \$GLOBALS['registry']->getAuthCredential('password');
-			@ldap_bind(\$conn, "uid=\$username," . \$this->ldapSearchBase(), \$pass);
-			return \$conn;
-		}
+	private function bindLdap(\$username)
+	{
+		\$conn = @ldap_connect('ldapi:///', '389');
+		@ldap_set_option(\$conn, LDAP_OPT_PROTOCOL_VERSION, 3);
+		\$pass = \$GLOBALS['registry']->getAuthCredential('password');
+		@ldap_bind(\$conn, "uid=\$username," . \$this->ldapSearchBase(), \$pass);
+		return \$conn;
+	}
 
-		private function getUserRecord(\$username)
-		{
-				\$conn = \$this->bindLdap(\$username);
-				\$searchResult = @ldap_search(\$conn, \$this->ldapSearchBase(),
-					'uid=' . \$username);
-				return @ldap_get_entries(\$conn, \$searchResult);
-		}
+	private function getUserRecord(\$conn, \$username)
+	{
+			\$searchResult = @ldap_search(\$conn, \$this->ldapSearchBase(),
+				'uid=' . \$username);
+			return @ldap_get_entries(\$conn, \$searchResult);
+	}
 
-		public function prefs_init(\$pref, \$value, \$username, \$scope_ob)
-		{
-			switch (\$pref) {
-			case 'from_addr':
-				if (is_null(\$username)) {
-					return \$value;
-				}
-
-				\$information = \$this->getUserRecord(\$username);
-				if ((\$information === false) || (\$information['count'] == 0)) {
-					 \$user = '';
-				} else {
-					\$user = (\$information[0]['mail'][0] != '')
-						? \$information[0]['mail'][0] . "@" . \$this->getMailDomain()
-						: \$information[0]['uid'][0];
-				}
-				ldap_close(\$conn);
-
-				return empty(\$user)
-					? \$username
-					: \$user;
-
-			case 'fullname':
-				if (is_null(\$username)) {
-					return \$value;
-				}
-
-				\$information = \$this->getUserRecord(\$username);
-				if ((\$information === false) || (\$information['count'] == 0)) {
-					\$name = '';
-				} else {
-					\$name = \$information[0]['cn'][0];
-				}
-				ldap_close(\$conn);
-
-				return empty(\$name)
-					? \$username
-					: \$name;
+	public function prefs_init(\$pref, \$value, \$username, \$scope_ob)
+	{
+		switch (\$pref) {
+		case 'from_addr':
+			if (is_null(\$username)) {
+				return \$value;
 			}
+
+			\$conn = \$this->bindLdap(\$username);
+			\$information = \$this->getUserRecord(\$conn, \$username);
+			if ((\$information === false) || (\$information['count'] == 0)) {
+				 \$user = '';
+			} else {
+				# Must use lowercase attribute names!
+				\$user = (\$information[0]['mailroutingaddress'][0] != '')
+					? \$information[0]['mailroutingaddress'][0] . "@" . \$this->getMailDomain()
+					: \$information[0]['uid'][0];
+			}
+			ldap_close(\$conn);
+
+			return empty(\$user)
+				? \$username
+				: \$user;
+
+		case 'fullname':
+			if (is_null(\$username)) {
+				return \$value;
+			}
+
+			\$conn = \$this->bindLdap(\$username);
+			\$information = \$this->getUserRecord(\$conn, \$username);
+			if ((\$information === false) || (\$information['count'] == 0)) {
+				\$name = '';
+			} else {
+				\$name = \$information[0]['cn'][0];
+			}
+			ldap_close(\$conn);
+
+			return empty(\$name)
+				? \$username
+				: \$name;
 		}
 	}
-	EOF
+}
+EOF
 fi
 
 if [[ ! -e $horde_dir/config/prefs.local.php ]]
