@@ -1150,6 +1150,10 @@ backup 10-ssl.conf
 sudo sed -i -r 's#^(ssl_cert = <).*$#\1/etc/ssl/certs/dovecot.pem#'  10-ssl.conf
 sudo sed -i -r 's#^(ssl_key = <).*$#\1/etc/ssl/private/dovecot.pem#' 10-ssl.conf
 popd
+pushd /etc/postfix
+sudo sed -i -r 's#(smtpd_tls_cert_file=/etc/ssl/certs/).+$#\1ssl-mail.pem#' main.cf
+sudo sed -i -r 's#(smtpd_tls_key_file=/etc/ssl/private/).+$#\1ssl-mail.key#' main.cf
+popd
 
 
 # ######################
