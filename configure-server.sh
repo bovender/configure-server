@@ -21,6 +21,7 @@ domain=ubuntu
 tld=vbox
 horde_subdomain=horde
 owncloud_subdomain=cloud
+smtp_subdomain=mail
 
 # Details of the 'admin user'.
 # Note that this is not the server user, but a user account that is stored in
@@ -970,6 +971,7 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 	sudo postconf -e "canonical_maps = proxy:ldap:$postfix_base/postfix-ldap-canonical-map.cf"
 	sudo postconf -e "canonical_classes = header_recipient, header_sender, envelope_recipient, envelope_sender"
 	sudo postconf -e "local_header_rewrite_clients = static:all"
+	sudo postconf -e "myhostname = $smtp_subdomain.$server_fqdn"
 fi
 # The Postfix password must be updated, because it was updated in the LDAP
 # entry as well.
@@ -1037,7 +1039,7 @@ sudo tee $postfix_base/bogus_mx >/dev/null <<-EOF
 	# bogus networks
 	0.0.0.0/8       550 Mail server in broadcast network
 	10.0.0.0/8      550 No route to your RFC 1918 network
-	127.0.0.0/8     550 Mail server in loopback network
+	# 127.0.0.0/8     550 Mail server in loopback network
 	224.0.0.0/4     550 Mail server in class D multicast network
 	172.16.0.0/12   550 No route to your RFC 1918 network
 	192.168.0.0/16  550 No route to your RFC 1918 network
