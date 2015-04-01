@@ -60,6 +60,7 @@ cert_company=bovender
 server_fqdn=$domain.$tld
 horde_fqdn=$horde_subdomain.$server_fqdn
 owncloud_fqdn=$owncloud_subdomain.$server_fqdn
+postfix_fqdn=$smtp_subdomain.$server_fqdn
 
 # Postfix configuration directories
 postfix_base=/etc/postfix
@@ -311,10 +312,12 @@ generate_cert() {
 		authorityKeyIdentifier = keyid:always
 		EOF
 	local filename=`echo $1 | sed "s/^\*\./wildcard./"`
-	openssl req -config "$0.openssl" -new -nodes \
+	openssl req -config "$0.openssl" -new -nodes 
 		-keyout "$filename.key" -out "$filename.csr" 
 	if [[ -a "$filename.csr" ]]; then
-		openssl ca  -config "$0.openssl" -batch -in "$filename.csr" -out "$filename.pem" 
+		read -sp "Please enter the passphrase for the CA's private key:" ca_pass
+		openssl ca  -config "$0.openssl" -passin env:ca_pass \
+		 	-batch -in "$filename.csr" -out "$filename.pem" 
 		rm "$0.openssl" "$filename.csr"
 		chmod 444 "$filename.pem"
 		chmod 400 "$filename.key"
@@ -380,6 +383,22 @@ if [ -z "$SSH_CLIENT" ]; then
 		
 		heading "You appear to be on a remote desktop computer."
 		echo "Configured remote: $bold$admin_user@$server_fqdn$normal"
+
+		if [[ -d "$ca_dir" ]]; then
+			heading "External media with 'CA' directory found!"
+			yesno "Generate SSL certificates and copy them to server?" answer y
+			if (( $? )); then 
+				generate_cert *.$domain.$tld
+				generate_cert $server_fqdn
+				generate_cert $horde_fqdn
+				generate_cert $owncloud_fqdn
+				generate_cert $postfix_fqdn
+				rsync $ca_dir/certs/$ca_name.pem $admin_user@$server_fqdn:.
+				# TODO: Check if rsync was successful
+			fi
+		fi
+
+		heading "Update script..."
 		yesno "Synchronize the script with the one on the server?" answer y
 		if (( $? )); then
 			message "Updating..."
@@ -389,35 +408,17 @@ if [ -z "$SSH_CLIENT" ]; then
 				message "An error occurred (rsync exit code: $code). Bye."
 				exit 3
 			fi
-			if (( $?==0 )); then
-				if [[ -d "$ca_dir" ]]; then
-					heading "External media with 'CA' directory found!"
-					yesno "Generate SSL certificates and copy them to server?" answer y
-					if (( $? )); then 
-						generate_cert *.$domain.$tld
-						generate_cert $server_fqdn
-						generate_cert $horde_fqdn
-						generate_cert $owncloud_fqdn
-						rsync $ca_dir/certs/$ca_name.pem $admin_user@$server_fqdn:.
-					fi
-				fi
-				yesno "Log into secure shell?" answer y
-				if (( $? )); then
-					heading "Logging into server's secure shell..."
-					ssh $admin_user@$server_fqdn
-					message "Returned from SSH session."
-					sync_script
-					exit 
-				else
-					message "Bye."
-				fi
-			else
-				echo "Failed to copy the file. Please check that the server is running "
-				echo "and the credentials are correct."
-			fi
-		else
-			echo "Bye."
 		fi
+
+		yesno "Log into secure shell?" answer y
+		if (( $? )); then
+			heading "Logging into server's secure shell..."
+			ssh $admin_user@$server_fqdn
+			message "Returned from SSH session."
+			sync_script
+			exit 
+		fi
+		echo "Bye."
 		exit
 	fi
 else
@@ -971,7 +972,7 @@ if [[ ! -a $postfix_base/postfix-ldap-canonical-map.cf ]]; then
 	sudo postconf -e "canonical_maps = proxy:ldap:$postfix_base/postfix-ldap-canonical-map.cf"
 	sudo postconf -e "canonical_classes = header_recipient, header_sender, envelope_recipient, envelope_sender"
 	sudo postconf -e "local_header_rewrite_clients = static:all"
-	sudo postconf -e "myhostname = $smtp_subdomain.$server_fqdn"
+	sudo postconf -e "myhostname = $postfix_fqdn"
 fi
 # The Postfix password must be updated, because it was updated in the LDAP
 # entry as well.
@@ -1039,6 +1040,7 @@ sudo tee $postfix_base/bogus_mx >/dev/null <<-EOF
 	# bogus networks
 	0.0.0.0/8       550 Mail server in broadcast network
 	10.0.0.0/8      550 No route to your RFC 1918 network
+	# The following line prevents proper operation if Postfix has a subdomain
 	# 127.0.0.0/8     550 Mail server in loopback network
 	224.0.0.0/4     550 Mail server in class D multicast network
 	172.16.0.0/12   550 No route to your RFC 1918 network
@@ -1048,6 +1050,17 @@ sudo tee $postfix_base/bogus_mx >/dev/null <<-EOF
 	# Wild-card MTA
 	64.94.110.11/32 550 REJECT VeriSign domain wildcard
 	EOF
+
+# Configure SSL/LS
+pushd /etc/postfix
+sudo sed -i -r \
+	's#(smtpd_tls_cert_file=/etc/ssl/certs/).+$#\1'$postfix_fqdn'.pem#' main.cf
+sudo sed -i -r \
+	's#(smtpd_tls_key_file=/etc/ssl/private/).+$#\1'$postfix_fqdn'.key#' main.cf
+
+heading "Enabling port 587 in Postfix configuration..."
+sudo sed -i -r 's/^#(submission\sinet.+)$/\1/' master.cf
+popd
 
 # #######################################################################
 # Dovecot configuration
@@ -1151,23 +1164,13 @@ fi
 sudo chown $vmail_user:$vmail_user $vmail_dir
 sudo chmod -R 750 $vmail_dir
 
-# Configure SSL/TLS for the mail suite
-heading "Updating SSL certificate paths..."
-sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/ssl-mail.pem
-sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/ssl-mail.key
-sudo ln -sf /etc/ssl/certs/$server_fqdn.pem   /etc/ssl/certs/dovecot.pem
-sudo ln -sf /etc/ssl/private/$server_fqdn.key /etc/ssl/private/dovecot.pem
+# Configure SSL/TLS for Dovecot
 pushd /etc/dovecot/conf.d
 backup 10-ssl.conf
-sudo sed -i -r 's#^(ssl_cert = <).*$#\1/etc/ssl/certs/dovecot.pem#'  10-ssl.conf
-sudo sed -i -r 's#^(ssl_key = <).*$#\1/etc/ssl/private/dovecot.pem#' 10-ssl.conf
-popd
-pushd /etc/postfix
-sudo sed -i -r 's#(smtpd_tls_cert_file=/etc/ssl/certs/).+$#\1ssl-mail.pem#' main.cf
-sudo sed -i -r 's#(smtpd_tls_key_file=/etc/ssl/private/).+$#\1ssl-mail.key#' main.cf
-
-heading "Enabling port 587 in Postfix configuration..."
-sudo sed -i -r 's/^#(submission\sinet.+)$/\1/' master.cf
+sudo sed -i -r \
+	's#^(ssl_cert = <).*$#\1/etc/ssl/certs/'$server_fqdn'.pem#'  10-ssl.conf
+sudo sed -i -r \
+	's#^(ssl_key = <).*$#\1/etc/ssl/private/'$server_fqdn'.pem#' 10-ssl.conf
 popd
 
 # ######################
