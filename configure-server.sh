@@ -430,6 +430,14 @@ if [[ $(find . -name '*.pem') ]]; then
 	popd
 fi
 
+# Make sure we have the certificates
+if [ `ls -1 /etc/ssl/certs/*${server_fqdn}.pem 2>/dev/null | wc -l ` -eq 0 ]
+then
+	heading "No certificates for this server were found!"
+	message "Please generate certificates by running this script on your local computer"
+	message "with a USB drive named 'CA' plugged in. (See the README file.)"
+fi
+
 # Install required packages
 install postfix dovecot-ldap postfix-ldap postfix-pcre \
   pwgen slapd ldap-utils bsd-mailx \
