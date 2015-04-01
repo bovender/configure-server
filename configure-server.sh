@@ -106,7 +106,7 @@ install() {
 
 # Synchronizes the script on the desktop with the one on the server
 sync_script() {
-	rsync -vuza ${0%.sh}.* $admin_user@$server_fqdn:.
+	rsync -vuza $0 $CONFIG_FILE $admin_user@$server_fqdn:.
 	code=$?
 	if (( code==0 )); then
 		# Sync the script (but not the config) back to the local computer
