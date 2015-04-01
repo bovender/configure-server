@@ -1195,7 +1195,7 @@ backup 10-ssl.conf
 sudo sed -i -r \
 	's#^(ssl_cert = <).*$#\1/etc/ssl/certs/'$server_fqdn'.pem#'  10-ssl.conf
 sudo sed -i -r \
-	's#^(ssl_key = <).*$#\1/etc/ssl/private/'$server_fqdn'.pem#' 10-ssl.conf
+	's#^(ssl_key = <).*$#\1/etc/ssl/private/'$server_fqdn'.key#' 10-ssl.conf
 popd
 
 # ######################
