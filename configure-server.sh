@@ -245,6 +245,24 @@ get_fingerprint() {
 }
 
 
+# Trim() function by GuruM and mkelement, http://stackoverflow.com/a/7486606/270712
+trim() {
+    # Determine if 'extglob' is currently on.
+    local extglobWasOff=1
+    shopt extglob >/dev/null && extglobWasOff=0 
+    (( extglobWasOff )) && shopt -s extglob # Turn 'extglob' on, if currently turned off.
+    # Trim leading and trailing whitespace
+    local var=$1
+    var=${var##+([[:space:]])}
+    var=${var%%+([[:space:]])}
+    (( extglobWasOff )) && shopt -u extglob # If 'extglob' was off before, turn it back off.
+    echo -n "$var"  # Output trimmed string.
+}
+
+remove_quotes() {
+	sed -r -e 's/^"(.*)"$/\1/' -e "s/^'(.*)'$/\1/" <<< "$1"
+}
+
 # #######################################################################
 # Begin main part of script
 # #######################################################################
@@ -264,9 +282,15 @@ heading "This will configure the Ubuntu server. ***"
 CONFIG_FILE="${0%.sh}.config"
 read -d '' CONFIG_TEMPLATE <<-EOF
 	# Configuration file for $(basename $0) version $version
-	# Please fill in all required fields! Empty values will not be accepted.
+	# ============================================================================
+	# Do not remove any variables that are listed here, or the script will refuse
+	# to run. You should fill in values for all variables; use "" or '' if you
+	# really do want an empty value. However, leaving any of the domain variables
+	# or the admin user information empty will cause the server configuration to
+	# FAIL.
 
 	# Domains
+	# -------
 	# Please split a domain like "example.com" into the domain part "example" and
 	# the top-level domain (TLD) "com". This is required to build LDAP DN's.
 	domain=
@@ -276,21 +300,25 @@ read -d '' CONFIG_TEMPLATE <<-EOF
 	smtp_subdomain=mail
 
 	# Details of the 'admin user'.
+	# ----------------------------
 	# Note that this is not the server user, but a user account that is stored in
 	# the LDAP database and is used to administer Horde and the other services.
 	admin_user=
+	# The admin_mail field must be just the part before the @ sign! Do not use
+	# the server's domain name here.
 	admin_mail=
 	admin_real_name=
 	admin_pass=
 
 	# Certificates
+	# ------------
 	ca_name=
 	cert_days=3650 # certificates are valid for 10 years by default
 	cert_country=
 	cert_city=
 	cert_state=
-	cert_org=
-	cert_company=
+	cert_org=""
+	cert_company=""
 	EOF
 
 if [[ ! -e "$CONFIG_FILE" ]]
@@ -313,11 +341,13 @@ else
 		if [[ ! -z "$CONFIG_VAR_NAME" ]]
 		then
 			CONFIG_VAR_VALUE=`grep -i "^$CONFIG_VAR_NAME=.*$" "$CONFIG_FILE"`
-			CONFIG_VAR_VALUE="${CONFIG_VAR_VALUE#*=}"
+			CONFIG_VAR_VALUE=$(trim "${CONFIG_VAR_VALUE#*=}")
 			if [[ ! -z "$CONFIG_VAR_VALUE" ]]
 			then
-				read -d '' "$CONFIG_VAR_NAME" <<< "$CONFIG_VAR_VALUE"
-				echo "$CONFIG_VAR_NAME=$CONFIG_VAR_VALUE"
+				read -d '' "$CONFIG_VAR_NAME" <<< $(remove_quotes "$CONFIG_VAR_VALUE")
+				# Use indirect variable reference: See http://tldp.org/LDP/abs/html/ivr.html
+				# (at bottom of the page).
+				echo "$CONFIG_VAR_NAME = \"${!CONFIG_VAR_NAME}\""
 			else
 				message "Configuration error: variable $CONFIG_VAR_NAME not set."
 				message "All configuration variables must be assigned in $CONFIG_FILE."
