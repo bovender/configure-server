@@ -456,15 +456,16 @@ if [ -z "$SSH_CLIENT" ]; then
 			message "An error occurred (rsync exit code: $code). Bye."
 			exit 3
 		fi
-	fi
 
-	yesno "Log into secure shell?" answer y
-	if (( $? )); then
-		heading "Logging into server's secure shell..."
-		ssh $admin_user@$server_fqdn
-		message "Returned from SSH session."
-		sync_script
-		exit 
+		# Offer to log into server via SSH only if script was updated
+		yesno "Log into secure shell?" answer y
+		if (( $? )); then
+			heading "Logging into server's secure shell..."
+			ssh $admin_user@$server_fqdn
+			message "Returned from SSH session."
+			sync_script
+			exit 
+		fi
 	fi
 	echo "Bye."
 	exit
