@@ -355,74 +355,52 @@ heading "This will configure the Ubuntu server. ***"
 # Find out about the current environment
 # ########################################################################
 
-# if this is the server, the script should be executed in an SSH if no SSH is
-# found, try to find out if is a server running in a VirtualBox, in which case
-# the VirtualBox guest additions will be installed. 
+# if this is the server, the script should be executed in an SSH.
 if [ -z "$SSH_CLIENT" ]; then
-	# Use virt-what to determine if we are running in a virtual machine.
-	install virt-what
+	heading "Local computer mode"
+	message "You appear to be on your local desktop computer, because there is no SSH client."
+	message "If this is not correct and you are running this script on a local terminal on"
+	message "the server (rather than a secure shell), please exit the script now (CTRL+C)."
+	message "Configured remote: $bold$admin_user@$server_fqdn$normal"
 
-	heading "Requesting sudo password to find out about virtual environment..."
-	vm=`sudo virt-what`
-	if [ "$vm" == 'virtualbox' ]; then
-		heading "Running in a VirtualBox VM."
-		if [ ! -d /opt/VBoxGuestAdditions* ]; then
-			heading "Installing guest additions... (please have CD virtually inserted)"
-			sudo mount /dev/sr0 /media/cdrom
-			if [ $? -eq 0 ]; then
-				install dkms build-essential
-				sudo /media/cdrom/VBoxLinuxAdditions.run
-			else
-				heading "Could not mount guest additions cd -- exiting..."
-				exit 1
-			fi
-		else
-			heading "VirtualBox guest additions are installed."
+	if [[ -d "$ca_dir" ]]; then
+		heading "External media with 'CA' directory found!"
+		yesno "Generate SSL certificates and copy them to server?" answer y
+		if (( $? )); then 
+			generate_cert *.$domain.$tld
+			generate_cert $server_fqdn
+			generate_cert $horde_fqdn
+			generate_cert $owncloud_fqdn
+			generate_cert $postfix_fqdn
+			rsync $ca_dir/certs/$ca_name.pem $admin_user@$server_fqdn:.
+			# TODO: Check if rsync was successful
 		fi
-	else # not running in a Virtual Box
-		
-		heading "You appear to be on a remote desktop computer."
-		echo "Configured remote: $bold$admin_user@$server_fqdn$normal"
-
-		if [[ -d "$ca_dir" ]]; then
-			heading "External media with 'CA' directory found!"
-			yesno "Generate SSL certificates and copy them to server?" answer y
-			if (( $? )); then 
-				generate_cert *.$domain.$tld
-				generate_cert $server_fqdn
-				generate_cert $horde_fqdn
-				generate_cert $owncloud_fqdn
-				generate_cert $postfix_fqdn
-				rsync $ca_dir/certs/$ca_name.pem $admin_user@$server_fqdn:.
-				# TODO: Check if rsync was successful
-			fi
-		fi
-
-		heading "Update script..."
-		yesno "Synchronize the script with the one on the server?" answer y
-		if (( $? )); then
-			message "Updating..."
-			sync_script
-			code=$?
-			if (( code )); then
-				message "An error occurred (rsync exit code: $code). Bye."
-				exit 3
-			fi
-		fi
-
-		yesno "Log into secure shell?" answer y
-		if (( $? )); then
-			heading "Logging into server's secure shell..."
-			ssh $admin_user@$server_fqdn
-			message "Returned from SSH session."
-			sync_script
-			exit 
-		fi
-		echo "Bye."
-		exit
 	fi
+
+	heading "Update script..."
+	yesno "Synchronize the script with the one on the server?" answer y
+	if (( $? )); then
+		message "Updating..."
+		sync_script
+		code=$?
+		if (( code )); then
+			message "An error occurred (rsync exit code: $code). Bye."
+			exit 3
+		fi
+	fi
+
+	yesno "Log into secure shell?" answer y
+	if (( $? )); then
+		heading "Logging into server's secure shell..."
+		ssh $admin_user@$server_fqdn
+		message "Returned from SSH session."
+		sync_script
+		exit 
+	fi
+	echo "Bye."
+	exit
 else
-	message "Running in a secure shell on the server."
+	message "Apparently running in a secure shell on the server."
 fi
 
 
