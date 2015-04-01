@@ -12,101 +12,6 @@
 # harm that may be the result of running this script.
 # #######################################################################
 
-# #######################################################################
-# Configuration variables - edit to customize!
-# #######################################################################
-
-# Domain names; the subdomains for Horde and OwnCloud must NOT be empty!
-domain=ubuntu
-tld=vbox
-horde_subdomain=horde
-owncloud_subdomain=cloud
-smtp_subdomain=mail
-
-# Details of the 'admin user'.
-# Note that this is not the server user, but a user account that is stored in
-# the LDAP database and is used to administer Horde and the other services.
-admin_user=daniel
-admin_mail=dk
-admin_real_name="Daniel Kraus"
-admin_pass=pass 
-
-# Parameters for the virtual mail user (a role that Dovecot assumes)
-vmail_user=vmail
-vmail_dir=/var/$vmail_user
-
-# SSL certificate handling $ca_dir is the path to your own certificate
-# authority. By default this is /media/{username}/CA/ca, meaning that your CA
-# key is on a drive labeled "CA" (e.g., a USB stick). If your certificates are
-# signed by a commercial CA, you may leave this empty. The script will
-# auto-detect if the USB drive is mounted and offer to generate fresh
-# certificates for the services that it will configure (Mail, LDAP, Apache
-# virtual hosts, OwnCloud).
-ca_dir=/media/$USER/CA/ca
-ca_name=ca
-cert_days=1825
-cert_country=DE
-cert_city=Wuerzburg
-cert_state=Bavaria
-cert_org=bovender
-cert_company=bovender
-
-# #######################################################################
-# End of configuration section; in most use cases you should not need to
-# edit anything below this comment.
-# #######################################################################
-
-# Domain names
-server_fqdn=$domain.$tld
-horde_fqdn=$horde_subdomain.$server_fqdn
-owncloud_fqdn=$owncloud_subdomain.$server_fqdn
-postfix_fqdn=$smtp_subdomain.$server_fqdn
-
-# Postfix configuration directories
-postfix_base=/etc/postfix
-postfix_main=$postfix_base/main.cf
-postfix_master=$postfix_base/master.cf
-
-# Dovecot configuration directories
-dovecot_base=/etc/dovecot
-dovecot_confd=$dovecot_base/conf.d
-
-# LDAP DNs
-ldapbaseDN="dc=$domain,dc=$tld"
-ldapusersDN="ou=users,$ldapbaseDN"
-ldapauthDN="ou=auth,$ldapbaseDN"
-ldapSharedDN="ou=shared,$ldapbaseDN"
-ldapAddressbookDN="ou=contacts,$ldapSharedDN"
-adminDN="cn=admin,$ldapbaseDN"
-pwhash="{SSHA}"
-
-# MySQL 
-mysql_admin=root
-horde_database=horde
-owncloud_database=owncloud
-
-# Control users for MySQL and OpenLDAP
-# These control users get new, random passwords whenever the script
-# is run; the generated passwords are mailed to root at the end.
-horde_mysql_user=horde
-owncloud_mysql_user=owncloud
-# Do not change the following LDAP defintions, because 'dovecot' and
-# 'postfix' are hard-coded in the 'cn: ...' directives of LDIF files
-dovecot_ldap_user="cn=dovecot,$ldapauthDN"
-postfix_ldap_user="cn=postfix,$ldapauthDN"
-horde_ldap_user="cn=horde,$ldapauthDN"
-owncloud_ldap_user="cn=owncloud,$ldapauthDN"
-
-# Horde parameters
-horde_dir=/var/horde
-
-# OwnCloud parameters
-# The OwnCloud dir should always end in 'owncloud' as this is the name of the
-# directory in the distributed tarball.
-owncloud_dir=/var/owncloud
-
-# Command to generate a random password (used for control users)
-password_cmd="pwgen -cns 16 1"
 
 # Internal ('work') variables
 version=0.0.1 # Semantic version
@@ -201,9 +106,11 @@ install() {
 
 # Synchronizes the script on the desktop with the one on the server
 sync_script() {
-	rsync -vuza $0 $admin_user@$server_fqdn:.
+	rsync -vuza ${0%.sh}.* $admin_user@$server_fqdn:.
 	code=$?
 	if (( code==0 )); then
+		# Sync the script (but not the config) back to the local computer
+		# in case the script was amended while working on the server
 		rsync -vuza $admin_user@$server_fqdn:$(basename $0) .
 		code=$?
 	fi
@@ -339,7 +246,7 @@ get_fingerprint() {
 
 
 # #######################################################################
-# Begin configuration
+# Begin main part of script
 # #######################################################################
 
 if [[ $(whoami) == "root" ]]; then
@@ -349,6 +256,138 @@ fi
 
 heading "   $(basename $0), version $version    ***"
 heading "This will configure the Ubuntu server. ***"
+
+# ########################################################################
+# Read configuration
+# ########################################################################
+
+CONFIG_FILE="${0%.sh}.config"
+read -d '' CONFIG_TEMPLATE <<-EOF
+	# Configuration file for $(basename $0) version $version
+	# Please fill in all required fields! Empty values will not be accepted.
+
+	# Domains
+	# Please split a domain like "example.com" into the domain part "example" and
+	# the top-level domain (TLD) "com". This is required to build LDAP DN's.
+	domain=
+	tld=
+	horde_subdomain=horde
+	owncloud_subdomain=cloud
+	smtp_subdomain=mail
+
+	# Details of the 'admin user'.
+	# Note that this is not the server user, but a user account that is stored in
+	# the LDAP database and is used to administer Horde and the other services.
+	admin_user=
+	admin_mail=
+	admin_real_name=
+	admin_pass=
+
+	# Certificates
+	ca_name=
+	cert_days=3650 # certificates are valid for 10 years by default
+	cert_country=
+	cert_city=
+	cert_state=
+	cert_org=
+	cert_company=
+	EOF
+
+if [[ ! -e "$CONFIG_FILE" ]]
+then
+	heading "No configuration file was found."
+	message "Will no generate a template file in $CONFIG_FILE which you will need to"
+	message "edit before running this script again. All fields need to be filled."
+	echo "$CONFIG_TEMPLATE" > "$CONFIG_FILE"
+	exit 1
+else
+	# Config file was found, let's parse it
+	# We find out about the _expected_ variables by reading the _default template_
+	# line by line, then try to get the value for the variable from the actual
+	# config file.
+	heading "Reading configuration..."
+	while IFS= read -r LINE
+	do
+		CONFIG_VAR_NAME="${LINE%%=*}" # remove everything after the '='
+		CONFIG_VAR_NAME="${CONFIG_VAR_NAME%%#*}" # remove everything after a '#'
+		if [[ ! -z "$CONFIG_VAR_NAME" ]]
+		then
+			CONFIG_VAR_VALUE=`grep -i "^$CONFIG_VAR_NAME=.*$" "$CONFIG_FILE"`
+			CONFIG_VAR_VALUE="${CONFIG_VAR_VALUE#*=}"
+			if [[ ! -z "$CONFIG_VAR_VALUE" ]]
+			then
+				read -d '' "$CONFIG_VAR_NAME" <<< "$CONFIG_VAR_VALUE"
+				echo "$CONFIG_VAR_NAME=$CONFIG_VAR_VALUE"
+			else
+				message "Configuration error: variable $CONFIG_VAR_NAME not set."
+				message "All configuration variables must be assigned in $CONFIG_FILE."
+				exit 
+			fi
+		fi
+	done <<< "$CONFIG_TEMPLATE"
+fi
+
+# #######################################################################
+# Site-specific configuration is achieved via a configuration file (see
+# below).
+# #######################################################################
+
+# Certificate generation
+ca_dir=/media/$USER/CA/ca
+
+# Domain names
+server_fqdn=$domain.$tld
+horde_fqdn=$horde_subdomain.$server_fqdn
+owncloud_fqdn=$owncloud_subdomain.$server_fqdn
+postfix_fqdn=$smtp_subdomain.$server_fqdn
+
+# Postfix configuration directories
+postfix_base=/etc/postfix
+postfix_main=$postfix_base/main.cf
+postfix_master=$postfix_base/master.cf
+
+# Dovecot
+vmail_user=vmail
+vmail_dir=/var/$vmail_user
+dovecot_base=/etc/dovecot
+dovecot_confd=$dovecot_base/conf.d
+
+# LDAP DNs
+ldapbaseDN="dc=$domain,dc=$tld"
+ldapusersDN="ou=users,$ldapbaseDN"
+ldapauthDN="ou=auth,$ldapbaseDN"
+ldapSharedDN="ou=shared,$ldapbaseDN"
+ldapAddressbookDN="ou=contacts,$ldapSharedDN"
+adminDN="cn=admin,$ldapbaseDN"
+pwhash="{SSHA}"
+
+# MySQL 
+mysql_admin=root
+horde_database=horde
+owncloud_database=owncloud
+
+# Control users for MySQL and OpenLDAP
+# These control users get new, random passwords whenever the script
+# is run; the generated passwords are mailed to root at the end.
+horde_mysql_user=horde
+owncloud_mysql_user=owncloud
+# Do not change the following LDAP defintions, because 'dovecot' and
+# 'postfix' are hard-coded in the 'cn: ...' directives of LDIF files
+dovecot_ldap_user="cn=dovecot,$ldapauthDN"
+postfix_ldap_user="cn=postfix,$ldapauthDN"
+horde_ldap_user="cn=horde,$ldapauthDN"
+owncloud_ldap_user="cn=owncloud,$ldapauthDN"
+
+# Horde parameters
+horde_dir=/var/horde
+
+# OwnCloud parameters
+# The OwnCloud dir should always end in 'owncloud' as this is the name of the
+# directory in the distributed tarball.
+owncloud_dir=/var/owncloud
+
+# Command to generate a random password (used for control users)
+password_cmd="pwgen -cns 16 1"
 
 
 # ########################################################################
