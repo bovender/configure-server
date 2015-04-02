@@ -1300,7 +1300,7 @@ if [[ ! -d $HORDE_DIR ]]; then
 	message "this information. The horde installer needs the credentials to create"
 	message "the database tables."
 	sudo webmail-install
-	sudo chown www-data:www-data $HORDE_DIR
+	sudo chown -R www-data:www-data $HORDE_DIR
 else
 	heading "Horde already installed."
 fi
