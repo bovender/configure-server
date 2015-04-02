@@ -1689,10 +1689,18 @@ if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
 	ServerName $OWNCLOUD_FQDN
 	DocumentRoot $OWNCLOUD_DIR
 	<Directory $OWNCLOUD_DIR>
-		AllowOverride None
+		# AllowOverride None
 		Order allow,deny
 		allow from all
 		Require all granted
+	</Directory>
+	<Directory $OWNCLOUD_DIR/data>
+		Order allow,deny
+		deny from all
+	</Directory>
+	<Directory $OWNCLOUD_DIR/config>
+		Order allow,deny
+		deny from all
 	</Directory>
 
 	LogLevel warn
