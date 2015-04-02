@@ -577,6 +577,9 @@ if [[ -n $(grep -i "^AllowUsers $USER" /etc/ssh/sshd_config) ]]; then
 		EOF
 fi
 
+# Add admin user to 'adm' group
+sudo adduser $ADMIN_USER adm 2>&1 >/dev/null
+
 # Prevent Grub from waiting indefinitely for user input on a headless server.
 
 if [[ -n $(grep "set timeout=-1" /etc/grub.d/00_header) ]]; then
