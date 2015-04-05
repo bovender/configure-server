@@ -1,21 +1,25 @@
-___Note: This script is unfinished, but it does accomplish setting up
-a mail server and IMAP server and Horde. I will continue to work on it
-when I have time.___
-
-Configure-server shell script
-=============================
+Configure-server Bash shell script
+==================================
 
 The configure-server script automagically configures a remote [Ubuntu
 Linux](http://www.ubuntu.com/business/server/overview) or Debian
 Server.
 
-I am a server newbie, and while I am putting together all 
-configuration steps needed for a (more or less) complete server setup, 
-I decided to put everything into a Bash script that I can execute on 
-the remote server.
+This script is intended to aid people like me: amateur server
+administrators. It is entirely self contained, copies itself to a
+remote server, and sets up a mail system as well as the following
+other services:
 
-__This script is under active development and not yet ready for 'real'
-use.__
+- [Postfix][] mail server with user management in LDAP directory and
+  SMTP-AUTH and TLS/STARTTLS support
+- [Dovecot][] IMAP/POP3 server with user management in LDAP directory
+  and TLS/STARTTLS support
+- [OpenLDAP][] server with SSL/TLS for central user management and
+  single sign-on
+- [Horde][] groupware
+- It also creates an Apache2 virtual host and an MySQL user and
+  database for an [OwnCloud][] cloud server; you only need to download
+  and install the current OwnCloud Server release.
 
 __DISCLAIMER: USE THIS SCRIPT AT YOUR OWN RISK! I ASSUME NO
 RESPONSIBILITY OR LIABILITY FOR ANY LOSS OF DATA, COMPROMISE OF
@@ -26,8 +30,8 @@ VM. See below for how to quickly set up a Ubuntu Server virtual
 machine.
 
 
-Prerequisites
--------------
+Supported operating systems
+---------------------------
 
 The script is being developed on Ubuntu 14.04 'Trusty Tahr' Server
 Edition. It should run on a current Debian server as well.
@@ -36,64 +40,125 @@ During installation of the operating system, you should request a LAMP
 setup and of course an SSH daemon.
 
 
-Features
---------
+SSL/TLS certificates
+--------------------
 
-The script configures the following services:
+Commercial SSL/TLS certificates are expensive. Because my server is
+accessed from just a few computers that me and my family control, I
+have chosen to act as my own Certificate Authority and not use
+self-signed certificates. Thus, I just have to install  my own root
+certificate on my own computer and on the computers of my family
+members in order to benefit from hassle-free secured connections.
 
-- Certificate-based SSH login
-- [Postfix][] mail server with user management in LDAP directory and
-  SMTP-AUTH and TLS/STARTTLS support
-- [Dovecot][] IMAP/POP3 server with user management in LDAP directory
-  and TLS/STARTTLS support
-- [OpenLDAP][] server for central user management and single sign-on
-- [Horde][] groupware
-- It also creates an Apache2 virtual host and an MySQL user and
-  database for an [OwnCloud][] cloud server; you only need to download
-  and install the current OwnCloud release.
-
-
-Customizing the script
-----------------------
-
-The script __must__ be customized by means of a couple of
-configuration variables right at the top. Most importantly, if you
-want to use the script on your own server, you __must__ change at
-least the following variables:
-
-- `$domain`
-- `$tld`
-- `$user` -- this should be the same user that you created during
-  installation of Ubuntu Server edition.
-- `$full\_user\_name`
-
-You will find all customization variables at the top of the script.
+For those cases where the server is accessed from computers that do
+not have the homegrown root certificate installed, the script
+conveniently summarizes the certificate fingerprints, which can easily
+be verified as needed (keeping a hardcopy of the fingerprints in the
+wallet).
 
 
-Running the script
-------------------
+Usage
+-----
 
-When you have customized the script, you can run it locally:
+Please read this before executing the script.
 
-	./configure-server.sh
+### Step 1: Installing the server
 
-The script will detect that it is not being executed on a server and
-will offer to upload itself to the server that you indicated (using
-the <tt>$domain</tt> and <tt>$tld</tt> variables). It can then log you
-into the secure shell on the server, where you can simple issue the
-same command again. In a few moments, you should have a fully
-functional server!
+Install Ubuntu Server Edition on your server in the usual way. During
+installation you should indicate that you want a LAMP stack, an SSH
+server, and an internet mail system. (It's up to you to install other
+services right away such as Samba, but the `configure-server` script
+won't deal with those.)
 
-If you happen to modify the script on the server, but run it again
-locally, the script will fetch the updated script from the server
-before logging you in.
+The user account that is created by the Ubuntu installer is only
+needed for low-level administrative work on the server (such as
+running the `configure-server` script). Therefore, you
+can (and should) use a complicated password (and maybe even
+complicated user name). The `configure-server` script will set up an
+LDAP directory for actual user management on the server, and this LDAP
+directory will be populated with a main user (admin user) that serves
+as administrator for e.g. Horde. The main user account stored in the
+LDAP directory has nothing to do with the user account on the server.
+
+### Step 2: Basic configuration of the script
+
+Clone the repository (or simply download the script) to your __local__
+computer. The script should not be executed as root (in fact, it will
+refuse to run as root). It uses `sudo` internally as needed.
+
+The first time you run the script, a configuration file
+`configure-server.config` will be created. You __must__ edit this file
+to tell the script the domain name of your server, as well as other
+information. _Importantly, you need to edit the information for the
+main server user._ Remember that this main user account will be stored
+in the LDAP directory, and is different from the low-level user
+account that you use to log into the secure shell on the server.
+
+### Step 3: Generating SSL certificates
+
+The second time you run the script, the configuration file will be
+read. At this point, you should have an external USB drive labeled
+`CA` plugged into your computer. The script will create a directory
+`ca` on this USB drive (e.g., `/media/USERNAME/CA/ca`), which will
+serve as a Certificate Authority for SSL certificates. The
+certificates that the script creates will be signed with a root
+certificate that is stored on the USB drive. _Make sure to keep this
+USB drive in a safe place, as it contains the private key of your own
+root certificate._ 
+
+SSL certificates will be generated every time the script is run while
+the `CA` USB drive is mounted. This way, you can conveniently update
+your certificates, for instance if they are about to expire (default
+lifetime is 5 years). All you need to do is plug in the USB drive, run
+the script, and enter the passphrase for the CA private key.
+
+### Step 4: Copying the script to the server
+
+When the script is executed locally, it will offer to copy itself to
+the remote server, and log into the SSH shell of the server.
+
+One thing that the script does not currently do, but that you may want
+to consider, is to `ssh-copy-id` your personal SSH key to the server
+so you don't have to enter the password. You may also want to edit
+`/etc/ssh/sshd_config` to disable password authentication (see
+[docs][sshd-docs]).
+
+### Step 5: Running the script on the server
+
+Once you are logged into the secure shell on the server, run
+
+    ./configure-server.sh
+
+to start the actual server setup.
+
+The script will now detect that it is being executed on the server,
+and will start downloading required packages (via `apt-get` and `pear
+install`), and it will adjust all sorts of configuration files. See
+below for details.
+
+At the end, you will see a summary printed on the screen, which is
+also stored in `~/readme-configure-server` as well as mailed to the
+root account (which is tied to the main user account in the LDAP
+directory). 
+
+The summary contains the user names and passwords of the control users
+that were automatically created for Postfix, Dovecot, Horde, and
+OwnCloud. These control users are required for LDAP and MySQL
+authorization of these services. Normally you won't need the
+information, but if you are going to install OwnCloud for example, you
+will have to enter the control user's credentials during setup.
+
+If you print out the SSL certificate fingerprints that are listed in
+the summary, you can quickly verify your certificates if you ever
+access the server from a computer that does not have your own root
+certificate installed.
 
 
 Configuration notes
 -------------------
 
 The configuration notes assume that you have a basic knowledge of the
-software. If you are (like me) a server newbie, you may find the
+services used. If you are (like me) a server newbie, you may find the
 following resources (online & offline) useful:
 
 - Postfix:  <www.postfix.org>, [The Book of Postfix][pf-book]
@@ -102,7 +167,7 @@ following resources (online & offline) useful:
 - [Ubuntu Server Guide][guide]
 
 
-### LDAP ###
+### User management with LDAP
 
 I chose to set up an LDAP directory server because I was intrigued by
 the notion of a unified sign-in (single sign-in) for all services, as
@@ -144,15 +209,47 @@ To enable Postfix and Dovecot to look up information in the LDAP
 directory, another branch of the DIT is created as
 `ou=auth,dc=$domain,dc=$tld`; the corresponding entries are:
 
-        cn=dovecot,ou=auth,dc=$domain,dc=$tld
-        cn=postfix,ou=auth,dc=$domain,dc=$tld
+    cn=dovecot,ou=auth,dc=$domain,dc=$tld
+    cn=postfix,ou=auth,dc=$domain,dc=$tld
 
 These two users have ACL-controlled access to
 `ou=users,dc=$domain,dc=$tld`.
 
 In summary, the DIT that the script sets up looks as follows:
 
-_TODO_
+    #                            +------------------+                   
+    #                            | dc=DOMAIN,dc=TLD |                   
+    #                            +--------+---------+                   
+    #                                     |                             
+    #                  +----------------------------------------+       
+    #                  |                  |                     |       
+    #            +-----+----+        +----+----+          +-----+-----+ 
+    #  +---------+ ou=users |        | ou=auth |          | ou=shared | 
+    #  |         +-+--------+        +----+----+          +-----+-----+ 
+    #  |           |                      |                     |       
+    #  |   +-------+--------+    +--------+---------+    +------+------+
+    #  |   | uid=ADMIN_USER |    | cn=OWNCLOUD_USER |    | ou=contacts |
+    #  |   +-------+--------+    +------------------+    +-------------+
+    #  |           |             +------------------+                   
+    #  |      +----+--------+    | cn=DOVECOT_USER  |                   
+    #  |      | ou=contacts |    +------------------+                   
+    #  |      +-------------+    +------------------+                   
+    #  |                         | cn=HORDE_USER    |                   
+    #  |   +----------------+    +------------------+                   
+    #  +---+ uid=...        |    +------------------+                   
+    #      +-------+--------+    | cn=POSTFIX_USER  |                   
+    #              |             +------------------+                   
+    #         +----+--------+                                           
+    #         | ou=contacts |                                           
+    #         +-------------+                                           
+    #                                                                   
+    #           USERS               CONTROL USERS          SHARED STUFF 
+    #        with personal          for services           like shared  
+    #        addressbooks                                  addressbook  
+    #
+    #
+    #                            (created with http://www.asciiflow.com)
+                                                                 
 
 __Important note:__ OpenLDAP is _extremely_ picky about spaces in LDIF
 files. Ordinarily every line is expected to have no leading spaces. If
@@ -186,21 +283,6 @@ we replace Postfix' own `local` transport with Dovecot, the
 is delivered*, rather than *when an e-mail is received*. With Dovecot
 set up as local delivery agent, Postfix will *never* consult
 `local_aliases`. 
-
-
-[postfix]:    http://www.postfix.org
-[pf-book]:    http://www.postfix-book.com
-[pf-addr]:    http://www.postfix.org/ADDRESS_REWRITING_README.html
-[pf-ldap]:    http://www.postfix.org/LDAP_README.html#example_virtual
-[dovecot]:    http://www.dovecot.org
-[courier]:    http://www.courier-mta.org/imap
-[horde]:      http://www.horde.org
-[openldap]:   http://www.openldap.org
-[owncloud]:   http://www.owncloud.org
-[zytrax]:     http://zytrax.com/books/ldap
-[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas "OLC: OnLine Configuration, a feature of newer OpenLDAP versions"
-[guide]:      https://help.ubuntu.com/12.04/serverguide/index.html
-[dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
 
 
 ### Horde Webmail ###
@@ -239,28 +321,80 @@ sure to delete this file and the mail when you have memorized the
 passwords ;-)
 
 
-SSL certificates
-----------------
+OwnCloud
+--------
 
-If a USB stick named `CA` is detected on the local computer (not on
-the server), the `configure-server` script will create a custom
-Certificate Authority (CA) and a number of certificates that are
-signed by this custom CA. The CA certificates will be stored on the
-USB stick. The signed certificates are uploaded to the server. When
-the script is run on the server, it will check for the presence of
-certificates in the home directory, and move them to the appropriate
-place.
+If you want to use OwnCloud Server, [download][oc] the latest release
+to the server and extract the archive into `/var/`:
 
-The mail and IMAP servers and the Horde and OwnCloud virtual Apache2
-hosts are configured to use these certificates.
+    sudo tar xjf owncloud-X.Y.Z.tar.bz2 -C /var/
 
-_You must use this feature at least once, or else your server will
-complain about missing certificates. All it takes is to plug in a USB
-drive named 'CA'._
+> Adjust the ownerships and permissions of `/var/horde` and its
+> subfolders as described in the OwnCloud administrator's manual!
+
+Then, enable the Apache site that `configure-server` has already set
+up for you:
+
+    sudo a2ensite owncloud.config
+
+Now, navigate to your OwnCloud site (e.g. `cloud.example.com`, see
+configuration options above). Enter a user name and password for the
+initial OwnCloud user.
 
 
-Setting up a Ubuntu Server VM
+Changelog
+---------
+
+
+
+Known issues
+------------
+
+- SSL certificate creation needs some love.
+- Thunderbird does not read the LDAP address book. It connects to the
+  LDAP server all right, but the address book incorrectly reports "0
+  entries". I have yet to find out what the problem is.
+
+
+Addendum: Securing phpMyAdmin
 -----------------------------
+
+`configure-server` apt-get-installs [phpMyAdmin][] for you and sets
+the 'ForceSSL' to true (by adding a line to
+`/etc/phpmyadmin/config.inc.php`). However, this still leaves your
+phpMyAdmin login screen vulnerable for password hacking, since anybody
+from anywhere can access it.
+
+For heightened security, set the 'ForceSSL' config to `false` (you
+won't need SSL any more with this approach), then add
+
+    Order deny,allow
+    Deny from all
+    Allow from localhost
+
+to `/etc/apache2/conf-available/phpmyadmin.conf` and reload the Apache
+configuration.
+
+Then, use an SSH tunnel to access phpMyAdmin from localhost:
+
+    ssh -L 8080:localhost:80 $DOMAIN.$TLD
+
+Use <http://localhost:8080/phpmyadmin> in your browser.
+If you don't set 'ForceSSL' to `false` in the phpMyAdmin config, the
+tunnel command would be
+
+    ssh -L 8080:localhost:443 $DOMAIN.$TLD
+
+But I don't see much sense in using SSL-secured transmission in an
+SSH-secured tunnel. The browser would complain about an incorrect SSL
+certificate because the host name 'localhost' does not match
+'$DOMAIN.$TLD', so you will need  to compare the certificate's
+fingerprint to be on the safe side. (I don't use SSL+SSH, I use just
+the SSH tunnel.)
+
+
+Addendum: Setting up a Ubuntu Server VM
+---------------------------------------
 
 To 'play' with a Ubuntu Server, you can quickly set up a
 [VirtualBox](http://www.virtualbox.org) machine.
@@ -307,10 +441,10 @@ After starting up the virtual machine and installing the Ubuntu Server
 file](http://www.ubuntu.com/download/server)), sudo-edit the file
 <tt>/etc/network/interfaces</tt>:
 
-	auto eth0
-	iface eth0 inet static
-	address 192.168.56.101
-	netmask 255.255.255.0
+        auto eth0
+        iface eth0 inet static
+        address 192.168.56.101
+        netmask 255.255.255.0
 
 The other two interfaces (<tt>eth1</tt> and <tt>eth2</tt>) on the
 server are configured to *not* automatically connect (i.e., there is
@@ -323,7 +457,7 @@ Since the configure-server script needs to download a number of
 packages from the repositories, you need to make sure to have an
 internet connection:
 
-	sudo ifup eth1
+        sudo ifup eth1
 
 
 License
@@ -353,5 +487,22 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+[sshd-docs]:  https://help.ubuntu.com/community/SSH/OpenSSH/Configuring
+[postfix]:    http://www.postfix.org
+[pf-book]:    http://www.postfix-book.com
+[pf-addr]:    http://www.postfix.org/ADDRESS_REWRITING_README.html
+[pf-ldap]:    http://www.postfix.org/LDAP_README.html#example_virtual
+[dovecot]:    http://www.dovecot.org
+[courier]:    http://www.courier-mta.org/imap
+[horde]:      http://www.horde.org
+[openldap]:   http://www.openldap.org
+[owncloud]:   http://www.owncloud.org
+[zytrax]:     http://zytrax.com/books/ldap
+[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas "OLC: OnLine Configuration, a feature of newer OpenLDAP versions"
+[guide]:      https://help.ubuntu.com/12.04/serverguide/index.html
+[dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
+[phpmyadmin]: http://www.phpmyadmin.net
 
-<!-- vim:set tw=70 fo=tcroqn : -->
+
+
+<!-- vim:set tw=70 ts=4 sw=4 sts=4 et fo=tcroqn : -->
