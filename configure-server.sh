@@ -1185,23 +1185,30 @@ heading "Enabling port 587 in Postfix configuration..."
 sudo sed -i -r 's/^#(submission\sinet.+)$/\1/' master.cf
 popd
 
+
 # #######################################################################
 # Dovecot configuration
 # #######################################################################
+
+DOVECOT_MASTER="$DOVECOT_CONFD/10-master.conf"
 
 # Relax permissions of Dovecot's auth-userdb socket (required when dovecot-lda
 # is used for local mail delivery).
 # The following sed command will adjust the mode, user, and group directives
 # for auth-userdb.
-if [[ $(grep -Pzo "auth-userdb.*\N\s*?#mode" $DOVECOT_CONFD/10-master.conf) ]]; then
+if [[ $(grep -Pzo "auth-userdb.*\N\s*?#mode" "$DOVECOT_MASTER") ]]; then
 	heading "Adjusting permissions of Dovecot's auth-userdb socket..."
 	sudo sed -i -r "/auth-userdb \{/,/}/ { \
 		s/^(\s*)#mode = 0600.*$/\1mode = 0660/; \
 		s/^(\s*)#user =.*$/\1user = $VMAIL_USER/; \
-		s/^(\s*)#group =.*$/\1group = $VMAIL_USER/ ;}" $DOVECOT_CONFD/10-master.conf
+		s/^(\s*)#group =.*$/\1group = $VMAIL_USER/ ;}" "$DOVECOT_MASTER"
 else
 	message "Dovecot's auth-userdb socket permissions already adjusted."
 fi
+
+# Enable Postfix auth socket for SASL
+sudo sed -i -r '/Postfix smtp-auth/,/}$/{ /Postfix smtp-auth/b; s/^(\s*)#(.*)$/\1\2/}' \
+	"$DOVECOT_MASTER"
 
 if [[ -n $(grep '#!include auth-ldap' $DOVECOT_CONFD/10-auth.conf) ]]; then
 	pushd $DOVECOT_CONFD
