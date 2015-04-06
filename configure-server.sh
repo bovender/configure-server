@@ -69,10 +69,8 @@ heading() {
 }
 
 # Prints out a message
-# (Currently this uses the heading() function, but may be adjusted
-# according to personal preference.)
 message() {
-	heading "$*"
+	echo -e $BOLD"> $*"$NORMAL
 }
 
 config_file_writable_line() {
