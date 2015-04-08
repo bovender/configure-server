@@ -575,6 +575,7 @@ fi
 
 # Install required packages
 install apache2 mysql-server dovecot-imapd dovecot-ldap \
+	dovecot-managesieved dovecot-sieve \
 	postfix postfix-ldap postfix-pcre \
   pwgen slapd ldap-utils bsd-mailx \
   spamassassin clamav clamav-daemon amavisd-new phpmyadmin php-pear \
@@ -1230,6 +1231,12 @@ EOF
 	sudo sed -i -r 's/^#?(!include auth)/#\1/'           10-auth.conf
 	sudo sed -i -r 's/^#(!include auth-ldap)/\1/'        10-auth.conf
 	sudo sed -i -r "s/^#?(mail_.id =).*$/\1 $VMAIL_USER/" 10-mail.conf
+	sudo sed -i -r "s/^(\s*)#?\s*(mail_plugins\s*=\s*).*$/\1\2\$mail_plugins sieve/" 15-lda.conf
+	sudo sed -i -r "s~^(\s*)#?\s*(sieve\s*=\s*).*$~\1\2$VMAIL_DIR/%n/sieve/active-script.sieve~" \
+		90-sieve.conf
+	sudo sed -i -r "s~^(\s*)#?\s*(sieve_dir\s*=\s*).*$~\1\2$VMAIL_DIR/%n/sieve/scripts~" \
+		90-sieve.conf
+	# TODO: Create a global sieve dir
 	cd $DOVECOT_BASE
 	backup dovecot-ldap.conf.ext
 	sudo tee dovecot-ldap.conf.ext >/dev/null <<-EOF
@@ -1319,6 +1326,7 @@ if [[ ! -d $HORDE_DIR ]]; then
 	heading "Installing Horde..."
 	sudo pear upgrade PEAR
 	sudo pear channel-discover pear.horde.org
+	sudo pear install Net_Sieve
 	sudo pear install horde/horde_role
 	sudo pear run-scripts horde/horde_role
 	sudo pear install horde/webmail
@@ -1658,6 +1666,17 @@ then
 	\$_prefs['fullname']['locked'] = true;
 	\$_prefs['username']['locked'] = true;
 	EOF
+fi
+
+INGO_BACKENDS="$HORDE_DIR/ingo/config/backends.local.php"
+if [[ ! -e "$INGO_BACKENDS" ]]
+then
+	heading "Configuring Ingo backends..."
+	sudo tee "$INGO_BACKENDS" >/dev/null <<-EOF
+		<?php
+		$backends['imap']['disabled'] = true;
+		$backends['sieve']['disabled'] = false;
+		EOF
 fi
 
 if [[ ! -e /etc/apache2/sites-enabled/horde.conf ]]; then
