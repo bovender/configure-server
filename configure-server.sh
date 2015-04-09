@@ -1333,6 +1333,9 @@ if [[ ! -d $HORDE_DIR ]]; then
 	sudo pear install horde/Horde_Ldap
 	sudo pear install horde/Horde_Memcache
 
+	# Adjust PEAR configuration to make horde-alarms and kronolith-agenda
+	sudo pear config-set horde_dir "$HORDE_DIR"
+
 	message "When prompted, enter the following information:"
 	message "- Database name:     $HORDE_DATABASE"
 	message "- Database user:     $HORDE_MYSQL_USER"
@@ -1521,21 +1524,34 @@ sudo tee $HORDE_DIR/imp/config/backends.local.php >/dev/null <<-EOF
 	\$servers['imap']['hordeauth'] = true;
 	EOF
 
-# Horde-alarms does not work properly.
-# One issue is that the directory stored in the PEAR configuration
-# is not correct. While this can be solved by cd'ing to /var/horde/lib
-# in the crontab before executing horde-alarms, the other, bigger
-# issue is that Horde attempts to log into the MySQL server without
-# password if horde-alarms is run from the command line.
-# if [[ -z $(grep horde-alarms /etc/crontab) ]]; then
-# 	heading "Adding horde-alarms to system-wide crontab..."
-# 	sudo tee -a /etc/crontab <<-EOF
-# 		# Horde-alarms added by $0
-# 		*/5 * * * *	www-data	/usr/bin/horde-alarms
-# 	EOF
-# else
-# 	heading "Crontab already contains horde-alarms."
-# fi
+heading "Adjusting system-wide Crontab..."
+if ! grep horde-alarms /etc/crontab
+then
+	message "Adding horde-alarms."
+	sudo tee -a /etc/crontab <<-EOF
+		# Horde-alarms every 5 minutes added by $0
+		# If you receive error messages from the Cron daemon,
+		# make sure to adjust the PEAR configuration:
+		# sudo pear config-set horde_dir <YOUR_HORDE_DIR>
+		*/5 * * * *	www-data	/usr/bin/horde-alarms
+	EOF
+else
+	message "Crontab already contains horde-alarms."
+fi
+
+if ! grep kronolith-agenda /etc/crontab
+then
+	message "Adding kronolith-agenda."
+	sudo tee -a /etc/crontab <<-EOF
+		# Kronolith-agenda every day at 2:00 a.m. added by $0
+		# If you receive error messages from the Cron daemon,
+		# make sure to adjust the PEAR configuration:
+		# sudo pear config-set horde_dir <YOUR_HORDE_DIR>
+		0 2 * * *	www-data	/usr/bin/kronolith-agenda
+	EOF
+else
+	message "Crontab already contains kronolith-agenda."
+fi
 
 heading "Configuring Horde address books..."
 TURBA_BACKENDS_LOCAL="$HORDE_DIR/turba/config/backends.local.php"
