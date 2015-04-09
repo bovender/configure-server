@@ -1334,7 +1334,7 @@ if [[ ! -d $HORDE_DIR ]]; then
 	sudo pear install horde/Horde_Memcache
 
 	# Adjust PEAR configuration to make horde-alarms and kronolith-agenda
-	sudo pear config-set horde_dir "$HORDE_DIR"
+	sudo pear config-set horde_dir "$HORDE_DIR" system
 
 	message "When prompted, enter the following information:"
 	message "- Database name:     $HORDE_DATABASE"
@@ -1532,7 +1532,7 @@ then
 		# Horde-alarms every 5 minutes added by $0
 		# If you receive error messages from the Cron daemon,
 		# make sure to adjust the PEAR configuration:
-		# sudo pear config-set horde_dir <YOUR_HORDE_DIR>
+		# sudo pear config-set horde_dir <YOUR_HORDE_DIR> system
 		*/5 * * * *	www-data	/usr/bin/horde-alarms
 	EOF
 else
@@ -1546,7 +1546,7 @@ then
 		# Kronolith-agenda every day at 2:00 a.m. added by $0
 		# If you receive error messages from the Cron daemon,
 		# make sure to adjust the PEAR configuration:
-		# sudo pear config-set horde_dir <YOUR_HORDE_DIR>
+		# sudo pear config-set horde_dir <YOUR_HORDE_DIR> system
 		0 2 * * *	www-data	/usr/bin/kronolith-agenda
 	EOF
 else
