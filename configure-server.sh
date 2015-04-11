@@ -135,6 +135,18 @@ sync_script() {
 	return $CODE
 }
 
+# Extracts an embedded file from the current script.
+# Files must be delimited by '8< BEGIN <NAME> >8' and '8< END <NAME> >8'
+# lines. An optional '# ' at the start of each line of the embedded file
+# will be removed.
+# The section name must be given as parameter.
+# Ideally, the embedded files are placed at the end of the script,
+# with an 'exit' statement right in front of them.
+extract_file() {
+        sed "0,/8< BEGIN $1 >8/d; /8< END $1 >8/,\$d; s/^# //" $0
+}
+
+
 # Prepares the certificate authority
 prepare_certificate_authority() {
 	# Check if the CA directory structure has been initialized
@@ -668,14 +680,27 @@ EOF
 # LDAP configuration
 # ##################
 
-# Add misc schema to LDAP directory
-if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// \
+heading "Adding schemas to LDAP database..."
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// 
 	-b "cn=schema,cn=config" "cn=*misc*" dn 2>/dev/null ) ]]
 then
-	heading "Adding misc schema to LDAP directory..."
-	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c -f /etc/ldap/schema/misc.ldif
+	message "Adding misc schema to LDAP directory..."
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c < extract_file "mozillaOrgPerson"
 else
 	message "Misc schema already imported into LDAP."
+fi
+
+# Add mozillaOrgPerson schema to LDAP directory
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// 
+	-b "cn=schema,cn=config" "cn=*mozillaOrgPerson*" dn 2>/dev/null ) ]]
+then
+	message "Adding mozillaOrgPerson schema to LDAP directory..."
+	TEMPFILE="/tmp/$SCRIPT_NAME.ldiftmp"
+	extract_file "mozillaOrgPerson" >$TEMPFILE
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c -f $TEMPFILE
+	rm $TEMPFILE
+else
+	message "mozillaOrgPerson schema already imported into LDAP."
 fi
 
 # Check if the LDAP backend database (hdb) already contains an ACL directive
@@ -1935,5 +1960,73 @@ cat <<-EOF
 
 	$HOMEPAGE
 EOF
+
+exit
+
+# #####################################################################
+# EMBEDDED FILES FOLLOW
+# See extract_file() function.
+# #####################################################################
+
+# ################# 8< BEGIN mozillaOrgPerson >8 ######################
+# dn: cn=mozillaOrgPerson,cn=schema,cn=config
+# objectClass: olcSchemaConfig
+# cn: mozillaOrgPerson
+# olcAttributeTypes: {0}( 1.3.6.1.4.1.13769.2.1.1 NAME 'mozillaNickname' SUP nam
+#  e )
+# olcAttributeTypes: {1}( 1.3.6.1.4.1.13769.2.1.2 NAME 'mozillaUseHtmlMail' SYNT
+#  AX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
+# olcAttributeTypes: {2}( 1.3.6.1.4.1.13769.2.1.3 NAME 'mozillaSecondEmail' EQUA
+#  LITY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.
+#  1.1466.115.121.1.26{256} )
+# olcAttributeTypes: {3}( 1.3.6.1.4.1.13769.2.1.4 NAME 'mozillaHomeLocalityName'
+#   EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1
+#  .1466.115.121.1.15{128} )
+# olcAttributeTypes: {4}( 1.3.6.1.4.1.13769.2.1.5 NAME 'mozillaPostalAddress2' E
+#  QUALITY caseIgnoreListMatch SUBSTR caseIgnoreListSubstringsMatch SYNTAX 1.3.6
+#  .1.4.1.1466.115.121.1.41 )
+# olcAttributeTypes: {5}( 1.3.6.1.4.1.13769.2.1.6 NAME 'mozillaHomePostalAddress
+#  2' EQUALITY caseIgnoreListMatch SUBSTR caseIgnoreListSubstringsMatch SYNTAX 1
+#  .3.6.1.4.1.1466.115.121.1.41 )
+# olcAttributeTypes: {6}( 1.3.6.1.4.1.13769.2.1.7 NAME 'mozillaHomeState' SUP na
+#  me )
+# olcAttributeTypes: {7}( 1.3.6.1.4.1.13769.2.1.8 NAME 'mozillaHomePostalCode' E
+#  QUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1
+#  466.115.121.1.15{40} )
+# olcAttributeTypes: {8}( 1.3.6.1.4.1.13769.2.1.9 NAME 'mozillaHomeCountryName' 
+#  SUP name SINGLE-VALUE )
+# olcAttributeTypes: {9}( 1.3.6.1.4.1.13769.2.1.10 NAME 'mozillaHomeFriendlyCoun
+#  tryName' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3
+#  .6.1.4.1.1466.115.121.1.15 )
+# olcAttributeTypes: {10}( 1.3.6.1.4.1.13769.2.1.11 NAME 'mozillaHomeUrl' EQUALI
+#  TY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.
+#  1466.115.121.1.26{256} )
+# olcAttributeTypes: {11}( 1.3.6.1.4.1.13769.2.1.12 NAME 'mozillaWorkUrl' EQUALI
+#  TY caseIgnoreIA5Match SUBSTR caseIgnoreIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.
+#  1466.115.121.1.26{256} )
+# olcAttributeTypes: {12}( 1.3.6.1.4.1.13769.2.1.13 NAME 'nsAIMid' DESC 'AOL Ins
+#  tant Messenger (AIM) Identity' EQUALITY telephoneNumberMatch SUBSTR telephone
+#  NumberSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.50 )
+# olcAttributeTypes: {13}( 1.3.6.1.4.1.13769.2.1.14 NAME 'mozillaHomeStreet' EQU
+#  ALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.146
+#  6.115.121.1.15{128} )
+# olcAttributeTypes: {14}( 1.3.6.1.4.1.13769.2.1.96 NAME 'mozillaCustom1' SYNTAX
+#   1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# olcAttributeTypes: {15}( 1.3.6.1.4.1.13769.2.1.97 NAME 'mozillaCustom2' SYNTAX
+#   1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# olcAttributeTypes: {16}( 1.3.6.1.4.1.13769.2.1.98 NAME 'mozillaCustom3' SYNTAX
+#   1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# olcAttributeTypes: {17}( 1.3.6.1.4.1.13769.2.1.99 NAME 'mozillaCustom4' SYNTAX
+#   1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+# olcObjectClasses: {0}( 1.3.6.1.4.1.13769.2.2.1 NAME 'mozillaOrgPerson' SUP top
+#   AUXILIARY MAY ( sn $ givenName $ cn $ displayName $ mozillaNickname $ title 
+#  $ telephoneNumber $ facsimileTelephoneNumber $ mobile $ pager $ homePhone $ s
+#  treet $ postalCode $ mozillaPostalAddress2 $ mozillaHomeStreet $ mozillaHomeP
+#  ostalAddress2 $ l $ mozillaHomeLocalityName $ st $ mozillaHomeState $ mozilla
+#  HomePostalCode $ c $ mozillaHomeCountryName $ co $ mozillaHomeFriendlyCountry
+#  Name $ ou $ o $ mail $ mozillaSecondEmail $ mozillaUseHtmlMail $ nsAIMid $ mo
+#  zillaHomeUrl $ mozillaWorkUrl $ description $ mozillaCustom1 $ mozillaCustom2
+#   $ mozillaCustom3 $ mozillaCustom4 ) )
+# ################# 8< END mozillaOrgPerson >8   ######################
 
 # vim: fo+=ro ts=2 sw=2 noet nowrap
