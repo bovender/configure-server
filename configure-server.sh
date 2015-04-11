@@ -1843,6 +1843,11 @@ sudo postfix reload
 sudo service dovecot restart
 sudo service apache2 restart
 
+if [ -e "/etc/ssl/certs/${CA_FILE_NAME#.pem}.pem" ]]
+then
+	ROOT_CERT_FINGERPRINT=$(printf "\n%-20s %s" "CA root cert" $(get_fingerprint ${CA_FILE_NAME#.pem}))
+fi
+
 # Multi-line variable: see http://stackoverflow.com/a/1655389/270712
 read -r -d '' PWMSG <<EOF
 Control users have been set up in MySQL and OpenLDAP for Horde, OwnCloud, 
@@ -1858,11 +1863,12 @@ $(printf "%-11s %-10s %-42s %s" "Postfix" "n/a" "$POSTFIX_LDAP_USER" "$POSTFIX_P
 
 
 These are the SHA1 fingerprints of the SSL certificates:
-
+$ROOT_CERT_FINGERPRINT
 $(printf "%-20s %s" "$SERVER_FQDN" $(get_fingerprint $SERVER_FQDN))
 $(printf "%-20s %s" "$HORDE_FQDN" $(get_fingerprint $HORDE_FQDN))
 $(printf "%-20s %s" "$OWNCLOUD_FQDN" $(get_fingerprint $OWNCLOUD_FQDN))
 $(printf "%-20s %s" "Dovecot IMAP server" $(get_fingerprint $SERVER_FQDN))
+
 EOF
 
 INFOFILE="${SCRIPT_NAME}.readme"
