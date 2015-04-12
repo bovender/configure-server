@@ -703,6 +703,26 @@ else
 	message "mozillaOrgPerson schema already imported into LDAP."
 fi
 
+# Add RFC2739 schema to LDAP directory
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// 
+	-b "cn=schema,cn=config" "cn=*calEntry*" dn 2>/dev/null ) ]]
+then
+	message "Adding RFC2739 schema to LDAP directory..."
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c -f /usr/share/php/data/horde/scripts/ldap/rfc2739.ldif
+else
+	message "RFC2739 schema already imported into LDAP."
+fi
+
+# Add horde schema to LDAP directory
+if [[ -z $(sudo ldapsearch -LLL -Y external -H ldapi:/// 
+	-b "cn=schema,cn=config" "cn=*turbaContact*" dn 2>/dev/null ) ]]
+then
+	message "Adding Horde schema to LDAP directory..."
+	sudo ldapadd -Y EXTERNAL -H ldapi:/// -c -f /usr/share/php/data/horde/scripts/ldap/horde.ldif
+else
+	message "Horde schema already imported into LDAP."
+fi
+
 # Check if the LDAP backend database (hdb) already contains an ACL directive
 # for Postfix. If none is found, assume that we need to configure the backend
 # database.
