@@ -1766,6 +1766,7 @@ if [[ ! -e /etc/apache2/sites-enabled/horde.conf ]]; then
 	SSLEngine on
 	SSLCertificateFile    /etc/ssl/certs/${HORDE_FQDN}.pem
 	SSLCertificateKeyFile /etc/ssl/private/${HORDE_FQDN}.key
+	Header always set Strict-Transport-Security "max-age=63072000; includeSubdomains; preload"
 
 	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
 	<FilesMatch "\.(cgi|shtml|phtml|php)$">
@@ -1820,6 +1821,7 @@ if [[ ! -a /etc/apache2/sites-enabled/owncloud.conf ]]; then
 	SSLEngine on
 	SSLCertificateFile    /etc/ssl/certs/${OWNCLOUD_FQDN}.pem
 	SSLCertificateKeyFile /etc/ssl/private/${OWNCLOUD_FQDN}.key
+	Header always set Strict-Transport-Security "max-age=63072000; includeSubdomains; preload"
 
 	#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire
 	<FilesMatch "\.(cgi|shtml|phtml|php)$">
@@ -1842,7 +1844,7 @@ else
 	heading "OwnCloud subdomain ($OWNCLOUD_FQDN) for Apache already configured."
 	message "(Enable with 'sudo a2ensite owncloud.config if desired.)"
 fi
-sudo a2enmod ssl rewrite
+sudo a2enmod ssl rewrite headers
 
 # If the default SSL host configuration contains the original 'snakeoil'
 # certificate, replace it with our own.
