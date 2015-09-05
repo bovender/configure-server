@@ -257,7 +257,7 @@ create_openssl_config() {
 		emailAddress           = ca@$SERVER_FQDN
 
 		[ usr_cert ]
-		basicConstraints       = CA:FALSE
+		basicConstraints       = CA:TRUE
 		nsCertType             = server, email
 		nsComment              = "Generated with OpenSSL by $(basename $0) ($HOMEPAGE)"
 		subjectKeyIdentifier   = hash
@@ -266,13 +266,13 @@ create_openssl_config() {
 		extendedKeyUsage       = serverAuth
 
 		[ v3_req ]
-		basicConstraints       = CA:FALSE
+		basicConstraints       = CA:TRUE
 		keyUsage               = nonRepudiation, digitalSignature, keyEncipherment
 
 		[ v3_ca ]
 		subjectKeyIdentifier   = hash
 		authorityKeyIdentifier = keyid:always,issuer
-		basicConstraints       = CA:true
+		basicConstraints       = CA:TRUE
 
 		[ crl_ext ]
 		authorityKeyIdentifier = keyid:always
@@ -284,7 +284,7 @@ create_openssl_config() {
 # Parameters:
 # $1 - pass phrase for the CA key
 # $2 - common name (e.g., virtual.domain.tld)
-generate_and_copy_cert() {
+generate_cert() {
 	heading "Generating and signing SSL certificate for $2 ..."
 
 	create_openssl_config "$2"
@@ -298,8 +298,6 @@ generate_and_copy_cert() {
 		rm "$FILENAME.csr"
 		chmod 444 "$FILENAME.pem"
 		chmod 400 "$FILENAME.key"
-		rsync -v "$FILENAME.pem" "$FILENAME.key" $ADMIN_USER@$SERVER_FQDN:
-		rm -f "$FILENAME.key" "$FILENAME.pem" 2>&1 >/dev/null
 	else
 		message "Failed to generate certificate signing request for $2."
 		set -e; exit 90
@@ -493,6 +491,9 @@ OWNCLOUD_DIR=/var/owncloud
 PASSWORD_CMD="pwgen -cns 16 1"
 
 
+# Name of the temporary directory to store the certificates
+CERTTMPDIR=configureservercerttmpdir
+
 # ########################################################################
 # Find out about the current environment
 # ########################################################################
@@ -512,13 +513,19 @@ if [ -z "$SSH_CLIENT" ]; then
 		if (( $? )); then 
 			prepare_certificate_authority
 			read -sp "Please enter the passphrase for the CA's private key:" CA_PASS
-			generate_and_copy_cert $CA_PASS *.$DOMAIN.$TLD
-			generate_and_copy_cert $CA_PASS $SERVER_FQDN
-			generate_and_copy_cert $CA_PASS $HORDE_FQDN
-			generate_and_copy_cert $CA_PASS $OWNCLOUD_FQDN
-			generate_and_copy_cert $CA_PASS $POSTFIX_FQDN
+			mkdir -p $CERTTMPDIR
+			rm -f $CERTTMPDIR/*
+			pushd $CERTTMPDIR
+			generate_cert $CA_PASS *.$DOMAIN.$TLD
+			generate_cert $CA_PASS $SERVER_FQDN
+			generate_cert $CA_PASS $HORDE_FQDN
+			generate_cert $CA_PASS $OWNCLOUD_FQDN
+			generate_cert $CA_PASS $POSTFIX_FQDN
+			generate_cert $CA_PASS git.$DOMAIN.$TLD
 			# Copy the CA itself to the server
-			rsync $CA_DIR/certs/$CA_FILE_NAME.pem $ADMIN_USER@$SERVER_FQDN:.
+			rsync -v * $CA_DIR/certs/$CA_FILE_NAME.pem $ADMIN_USER@$SERVER_FQDN:.
+			popd
+			rm -rf $CERTTMPDIR
 			if (( $? )); then exit 98; fi
 		fi
 	fi
