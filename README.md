@@ -2,8 +2,9 @@ Configure-server Bash shell script
 ==================================
 
 The configure-server script automagically configures a remote [Ubuntu
-Linux](http://www.ubuntu.com/business/server/overview) or Debian
-Server.
+Linux][] or Debian Server. Specifically, it has been used by the author
+to set up a Ubuntu 14.04 LTS server, but other versions should work as
+well, maybe with minor modifications.
 
 This script is intended to aid people like me: amateur server
 administrators. It is entirely self contained, copies itself to a
@@ -25,36 +26,33 @@ __DISCLAIMER: USE THIS SCRIPT AT YOUR OWN RISK! I ASSUME NO
 RESPONSIBILITY OR LIABILITY FOR ANY LOSS OF DATA, COMPROMISE OF
 PRIVACY, OR ANY OTHER MISHAP THAT MAY RESULT FROM USING THIS SCRIPT.__
 
-I mainly use the script to configure a server running in a VirtualBox
-VM. See below for how to quickly set up a Ubuntu Server virtual
-machine.
-
 
 Supported operating systems
 ---------------------------
 
-The script is being developed on Ubuntu 14.04 'Trusty Tahr' Server
-Edition. It should run on a current Debian server as well.
+The script has been successfully used to set up a Ubuntu 14.04 LTS
+'Trusty Tahr' Server Edition. It should run on a current Debian server
+as well.
 
-During installation of the operating system, you should request a LAMP
-setup and of course an SSH daemon.
+During initial installation of the operating system, you should
+request a LAMP setup and of course an SSH daemon.
 
 
 SSL/TLS certificates
 --------------------
 
 Commercial SSL/TLS certificates are expensive. Because my server is
-accessed from just a few computers that me and my family control, I
-have chosen to act as my own Certificate Authority and not use
-self-signed certificates. Thus, I just have to install  my own root
+accessed from just a few computers that I and my family control, I
+have chosen to act as my own _Certificate Authority_ and not use
+self-signed certificates. Thus, I just have to install my own root
 certificate on my own computer and on the computers of my family
 members in order to benefit from hassle-free secured connections.
 
 For those cases where the server is accessed from computers that do
 not have the homegrown root certificate installed, the script
 conveniently summarizes the certificate fingerprints, which can easily
-be verified as needed (keeping a hardcopy of the fingerprints in the
-wallet).
+be verified as needed before overriding security warnings (of course,
+this requires you to keep a hardcopy of the fingerprints handy).
 
 
 Usage
@@ -66,19 +64,23 @@ Please read this before executing the script.
 
 Install Ubuntu Server Edition on your server in the usual way. During
 installation you should indicate that you want a LAMP stack, an SSH
-server, and an internet mail system. (It's up to you to install other
-services right away such as Samba, but the `configure-server` script
-won't deal with those.)
+server, and an internet mail system, i.e. Postfix. (It's up to you to
+install other services right away such as Samba, but the
+`configure-server` script won't deal with those.)
+
+
+#### Understanding key user accounts
 
 The user account that is created by the Ubuntu installer is only
 needed for low-level administrative work on the server (such as
-running the `configure-server` script). Therefore, you
-can (and should) use a complicated password (and maybe even
-complicated user name). The `configure-server` script will set up an
-LDAP directory for actual user management on the server, and this LDAP
-directory will be populated with a main user (admin user) that serves
-as administrator for e.g. Horde. The main user account stored in the
-LDAP directory has nothing to do with the user account on the server.
+running the `configure-server` script). Therefore, you can (and
+should) use a complicated password (and maybe even complicated user
+name). The `configure-server` script will set up an LDAP directory for
+actual user management on the server, and this LDAP directory will be
+populated with a main user (admin user) that serves as administrator
+for e.g. Horde. The main user account stored in the LDAP directory has
+nothing to do with the user account on the server.
+
 
 ### Step 2: Basic configuration of the script
 
@@ -91,13 +93,14 @@ The first time you run the script, a configuration file
 to tell the script the domain name of your server, as well as other
 information. _Importantly, you need to edit the information for the
 main server user._ Remember that this main user account will be stored
-in the LDAP directory, and is different from the low-level user
-account that you use to log into the secure shell on the server.
+in the LDAP directory, and that it is different from the low-level
+user account that you use to log into the secure shell on the server.
+
 
 ### Step 3: Generating SSL certificates
 
 The second time you run the script, the configuration file will be
-read. At this point, you should have an external USB drive labeled
+read. At this point, you should have an _external USB_ drive labeled
 `CA` plugged into your computer. The script will create a directory
 `ca` on this USB drive (e.g., `/media/USERNAME/CA/ca`), which will
 serve as a Certificate Authority for SSL certificates. The
@@ -112,16 +115,18 @@ your certificates, for instance if they are about to expire (default
 lifetime is 5 years). All you need to do is plug in the USB drive, run
 the script, and enter the passphrase for the CA private key.
 
+
 ### Step 4: Copying the script to the server
 
 When the script is executed locally, it will offer to copy itself to
 the remote server, and log into the SSH shell of the server.
 
-One thing that the script does not currently do, but that you may want
-to consider, is to `ssh-copy-id` your personal SSH key to the server
-so you don't have to enter the password. You may also want to edit
-`/etc/ssh/sshd_config` to disable password authentication (see
-[docs][sshd-docs]).
+One thing that the script does not currently do automagically, but
+that you may want to consider, is to `ssh-copy-id` your personal SSH
+key to the server so you don't have to enter the password. You may
+also want to edit `/etc/ssh/sshd_config` to disable password
+authentication (see [docs][sshd-docs]).
+
 
 ### Step 5: Running the script on the server
 
@@ -129,16 +134,16 @@ Once you are logged into the secure shell on the server, run
 
     ./configure-server.sh
 
-to start the actual server setup.
+from inside your home directory to start the actual server setup.
 
 The script will now detect that it is being executed on the server,
-and will start downloading required packages (via `apt-get` and `pear
-install`), and it will adjust all sorts of configuration files. See
-below for details.
+and will start downloading additional required packages from the
+official repositories (via `apt-get` and `pear install`), and it will
+adjust various configuration files. See below for details.
 
 At the end, you will see a summary printed on the screen, which is
 also stored in `~/readme-configure-server` as well as mailed to the
-root account (which is tied to the main user account in the LDAP
+root account (which is aliased to the main user account in the LDAP
 directory). 
 
 The summary contains the user names and passwords of the control users
@@ -147,24 +152,28 @@ OwnCloud. These control users are required for LDAP and MySQL
 authorization of these services. Normally you won't need the
 information, but if you are going to install OwnCloud for example, you
 will have to enter the control user's credentials during setup.
+(Note that OwnCloud is _not_ automatically installed and configured;
+the script only adds an OwnCloud control user to the MySQL server and
+LDAP directory to facilitate installing OwnCloud when you feel like
+it.)
 
 If you print out the SSL certificate fingerprints that are listed in
-the summary, you can quickly verify your certificates if you ever
-access the server from a computer that does not have your own root
-certificate installed.
+the summary, and keep them in your pocket, you can quickly verify your
+certificates if you ever access the server from a computer that does
+not have your own root certificate installed.
 
 
 Configuration notes
 -------------------
 
 The configuration notes assume that you have a basic knowledge of the
-services used. If you are (like me) a server newbie, you may find the
-following resources (online & offline) useful:
+services used. If you are (like I was) a server newbie, you may find
+the following resources (online & offline) useful:
 
-- Postfix:  <www.postfix.org>, [The Book of Postfix][pf-book]
-- Dovecot:  <www.dovecot.org>
+- Postfix: <http://www.postfix.org> and [The Book of Postfix][pf-book]
+- Dovecot: <http://www.dovecot.org>
 - OpenLDAP: [Zytrax' Guide for Rocket Scientists][zytrax]
-- [Ubuntu Server Guide][guide]
+- Ubuntu Server: [Ubuntu Server Guide][guide]
 
 
 ### User management with LDAP
@@ -179,29 +188,29 @@ LDAP layout is heavily inspired by [The Book of Postfix][pf-book].
 The root of the data information tree (DIT) is construed from the
 `$domain` and `$tld` variables defined in the script.
 
-> If the OpenLDAP server does not accept your password, issue `sudo
-dpkg-reconfigure slapd` and enter `$domain.$tld` when asked about the
-machine name.
+> If the OpenLDAP server does not accept your password (which probably
+happens after the initial install), issue `sudo dpkg-reconfigure
+slapd` and enter `$domain.$tld` when asked about the machine name.
 
-User information is stored unter `ou=users,dc=$domain,dc=$tld` The
-entries' structural object class is `inetOrgPerson`. To be able to
+User information is stored unter `ou=users,dc=$domain,dc=$tld`. The
+entries' _structural object class_ is `inetOrgPerson`. To be able to
 store information about mail aliases, the Postfix documentation
 [suggests][pf-ldap] using attributes such as `mailDrop` and
 `mailAcceptingGeneralId`. [The Book of Postfix][pf-book] (first German
 edition) also uses `mailDrop` in an example setup of [Postfix][] and
 [Courier-IMAP][]. The problem here is that these attributes are not
 defined in the schemes that [OpenLDAP][] ships with on Ubuntu Server.
-The _cosine_ schema does include a structual object class
-`pilotPerson`, which defines attributes such as `otherMail` which one
+The _cosine_ schema does include a _structual object class_
+`pilotPerson`, which defines attributes such as `otherMail` that one
 could use as a storage field for aliases. But since both
 `inetOrgPerson` and `pilotPerson` are _structural_ classes, you cannot
-assign an entry to both of them at the same time. Therefore, I
-downloaded the Courier schema from the Ubuntu repositories, converted
-it to [OLC][zytrax-olc] ("cn=schema,cn=config") format, and included
-it in the script.
+assign an entry to both of them at the same time. Therefore, I ended
+up downloading the Courier schema from the Ubuntu repositories. I
+converted it to [OLC][zytrax-olc] ("cn=schema,cn=config") format, and
+included it in this script.
 
-Creating new attributes and classes without registered object ID (OID)
-is not considered good LDAP practice. Therefore I refrained from
+Creating new attributes and classes without a registered object ID
+(OID) is not considered good LDAP practice. Therefore I refrained from
 simply creating my own objectClass and chose to use the Courier
 schemas.
 
@@ -211,8 +220,9 @@ directory, another branch of the DIT is created as
 
     cn=dovecot,ou=auth,dc=$domain,dc=$tld
     cn=postfix,ou=auth,dc=$domain,dc=$tld
+    cn=owncloud,ou=auth,dc=$domain,dc=$tld
 
-These two users have ACL-controlled access to
+These control users have ACL-controlled access to
 `ou=users,dc=$domain,dc=$tld`.
 
 In summary, the DIT that the script sets up looks as follows:
@@ -252,17 +262,17 @@ In summary, the DIT that the script sets up looks as follows:
                                                                  
 
 __Important note:__ OpenLDAP is _extremely_ picky about spaces in LDIF
-files. Ordinarily every line is expected to have no leading spaces. If
-a line is continued, it must have a _trailing_ space, and the
-continuation line must have one _leading_ space. In my experience, a
-common cause of LDAP import errors is omission of the _trailing_ space
-on a continued line!
+files. Ordinarily, every line is expected to have no leading spaces.
+If a line is continued, it must have a _trailing_ space, and the
+continuation line must have one _leading_ space (!). In my experience,
+a common cause of LDAP import errors is omission of the _trailing_
+space on a continued line!
 
 
 ### Postfix ###
 
-The entire Postfix setup is _heavily_ inspired by [The Book of
-Postfix][pfbook].
+The entire Postfix setup is heavily inspired by [The Book of
+Postfix][pf-book].
 
 Even though my server is intended for a rather small group of people,
 I resorted to configuring Postfix for virtual users, rather than users
@@ -271,7 +281,7 @@ maintain. In my setup, all virtual users share the same domain.
 Therefore, in the spirit of keeping things [DRY][], the domain part of
 all e-mail addresses is omitted from the LDAP entries. As a
 consequence, the various configuration directives (LDAP queries,
-Dovecot's mailbox directive) contain placeholders for the 'local' part
+Dovecot's mailbox directive) contain variables for the 'local' part
 of an e-mail address, rather than the fully-qualified address.
 
 Once an email is accepted, we let Postfix hand it over to the Dovecot
@@ -285,10 +295,15 @@ set up as local delivery agent, Postfix will *never* consult
 `local_aliases`. 
 
 
+#### Postfix address rewriting and aliases
+
+
+
+
 ### Horde Webmail ###
 
 Horde Webmail Edition is installed and configured with a subdomain.
-The subdomain's default name is 'horde' and can be customized in the
+The subdomain's default name is 'horde'. This can be customized in the
 `$horde_subdomain` variable.
 
 Horde will ask you where to install; you may want to use `/var/horde`.
@@ -297,8 +312,7 @@ the MySQL server, so you should have these at hand when running the
 script.
 
 
-MySQL users
------------
+### MySQL users ###
 
 Two MySQL users and databases are automatically created, one for the
 Horde groupware and one for OwnCloud.
@@ -307,8 +321,7 @@ The 'horde' user is granted access to the 'horde' database; the
 predefined subdomain is 'horde'.
 
 The 'owncloud' is granted access to the 'owncloud' database; the
-predefined subdomain is 'cloud' (not owncloud, I found that's too
-long).
+predefined subdomain is 'cloud' (not owncloud, I found that too long).
 
 Thus, if you have `$domain=example` and `$tld=com`, the resulting web
 addresses for your applications are `horde.example.com` and
@@ -316,13 +329,12 @@ addresses for your applications are `horde.example.com` and
 
 Whenever the `configure-server` script is run, it creates new random
 passwords for the two MySQL users. The passwords are mailed to the
-master user, and they are also stored in `~/mysql-passwords`. Make
-sure to delete this file and the mail when you have memorized the
-passwords ;-)
+master user, and they are also stored in `~/readme-configure-server`.
+Make sure to delete this file and the mail once you have memorized the
+passwords!
 
 
-OwnCloud
---------
+### OwnCloud ###
 
 If you want to use OwnCloud Server, [download][oc] the latest release
 to the server and extract the archive into `/var/`:
@@ -330,7 +342,8 @@ to the server and extract the archive into `/var/`:
     sudo tar xjf owncloud-X.Y.Z.tar.bz2 -C /var/
 
 > Adjust the ownerships and permissions of `/var/horde` and its
-> subfolders as described in the OwnCloud administrator's manual!
+subfolders as described in the OwnCloud administrator's manual! [This
+blog post][oc-post] is a good summary.
 
 Then, enable the Apache site that `configure-server` has already set
 up for you:
@@ -342,31 +355,41 @@ configuration options above). Enter a user name and password for the
 initial OwnCloud user.
 
 
-Changelog
----------
+Client configuration
+--------------------
+
+### Importing the SSL root certificate
+
+Best results are obtained if you import the SSL root certificate into
+your browser(s) and other client software.
+
+> If you use __Thunderbird__, do not forget to import the root
+> certificate into it's certificate store as well! Thunderbird does
+> _not_ share certificates with Firefox. If you wonder why Thunderbird
+> fails to look up addresses from the LDAP address books, double-check
+> that the root certificate is actually installed.
 
 
+Known issues/Todo
+-----------------
 
-Known issues
-------------
-
-- SSL certificate creation needs some love.
-- Thunderbird does not read the LDAP address book. It connects to the
-  LDAP server all right, but the address book incorrectly reports "0
-  entries". I have yet to find out what the problem is.
+- refuse to start on server without certificates
+- add hdb database info to readme
+- chown /var/horde after installation
+- put ldaps://636 
 
 
 Addendum: Securing phpMyAdmin
 -----------------------------
 
-`configure-server` apt-get-installs [phpMyAdmin][] for you and sets
-the 'ForceSSL' to true (by adding a line to
+`configure-server` apt-get-installs [phpMyAdmin][] for you and enables
+the 'ForceSSL' option (by adding a line to
 `/etc/phpmyadmin/config.inc.php`). However, this still leaves your
 phpMyAdmin login screen vulnerable for password hacking, since anybody
 from anywhere can access it.
 
-For heightened security, set the 'ForceSSL' config to `false` (you
-won't need SSL any more with this approach), then add
+To harden your setup, disable 'ForceSSL' again (you won't need SSL any
+more with this approach), then add
 
     Order deny,allow
     Deny from all
@@ -375,7 +398,8 @@ won't need SSL any more with this approach), then add
 to `/etc/apache2/conf-available/phpmyadmin.conf` and reload the Apache
 configuration.
 
-Then, use an SSH tunnel to access phpMyAdmin from localhost:
+Then, use an SSH tunnel to access phpMyAdmin from a remote computer
+via the server's `localhost`:
 
     ssh -L 8080:localhost:80 $DOMAIN.$TLD
 
@@ -388,9 +412,9 @@ tunnel command would be
 But I don't see much sense in using SSL-secured transmission in an
 SSH-secured tunnel. The browser would complain about an incorrect SSL
 certificate because the host name 'localhost' does not match
-'$DOMAIN.$TLD', so you will need  to compare the certificate's
-fingerprint to be on the safe side. (I don't use SSL+SSH, I use just
-the SSH tunnel.)
+'$DOMAIN.$TLD', so you will need to compare the certificate's
+fingerprint anyway to be on the safe side. (I personally don't use
+SSL+SSH, I use just the SSH tunnel.)
 
 
 Addendum: Setting up a Ubuntu Server VM
@@ -417,8 +441,8 @@ network regardless of whether my laptop is online or not.
 If you run the `configure-server` script in the VirtualBox terminal
 (i.e., not in an SSH session), the script will detect that it is
 running in a VirtualBox system and install the Guest Additions,
-provided the installer has been 'inserted' into the virtual CD-ROM
-drive.
+provided the installer has been virtually 'inserted' into the virtual
+CD-ROM drive.
    
 
 ### Configuring static IP for the host and the guest ###
@@ -427,35 +451,32 @@ Since I do not configure a nameserver, I must make sure that the
 laptop and virtual server can always communicate. This is accomplished
 using static IP.
 
-Disable the VirtualBox DHCP server for the host-only network
-(<tt>File</tt> &rarr; <tt>Preferences</tt> &rarr; <tt>Network</tt>
-&rarr; <tt>Edit (space)</tt>).
+Disable the VirtualBox DHCP server for the host-only network (`File`
+&rarr; `Preferences` &rarr; `Network` &rarr; `Edit (space)`).
 
-To tell the host about the server, sudo-edit <tt>/etc/hosts</tt> _on
-the host system_. For example, if you gave your server the fully
-qualified domain name "test.local", insert a line
-<tt>192.168.56.__101__ test.local</tt>.
+To tell the host about the server, sudo-edit `/etc/hosts` _on the host
+system_. For example, if you gave your server the fully qualified
+domain name "test.local", insert a line <tt>192.168.56.__101__
+test.local</tt>.
 
 After starting up the virtual machine and installing the Ubuntu Server
-(from a previously [downloaded ISO
-file](http://www.ubuntu.com/download/server)), sudo-edit the file
-<tt>/etc/network/interfaces</tt>:
+(from a previously [downloaded ISO file][]), sudo-edit the file
+`/etc/network/interfaces`:
 
         auto eth0
         iface eth0 inet static
         address 192.168.56.101
         netmask 255.255.255.0
 
-The other two interfaces (<tt>eth1</tt> and <tt>eth2</tt>) on the
-server are configured to *not* automatically connect (i.e., there is
-no <tt>auto ethX</tt> line in <tt>/etc/network/interfaces</tt> on the
-server). This prevents the server from spending a long time waiting
-for network information on startup when my laptop is not connected to
-the internet.
+The other two interfaces (`eth1` and `eth2`) on the server are
+configured to _not_ automatically connect (i.e., there is no `auto
+ethX` line in `/etc/network/interfaces` on the server). This prevents
+the server from spending a long time waiting for network information
+on startup when my laptop is not connected to the internet.
 
-Since the configure-server script needs to download a number of
-packages from the repositories, you need to make sure to have an
-internet connection:
+Since the `configure-server` script needs to download a number of
+packages from the repositories, you need to bring up the internet
+connection:
 
         sudo ifup eth1
 
@@ -463,10 +484,9 @@ internet connection:
 License
 -------
 
-The script is made available und the [MIT
-license](http://opensource.org/licenses/mit-license.php).
+The script is released under the [MIT license]().
 
-Copyright (c) 2012 Daniel Kraus (bovender)
+Copyright (c) 2012-2015 Daniel Kraus ([bovender][])
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -487,22 +507,25 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-[sshd-docs]:  https://help.ubuntu.com/community/SSH/OpenSSH/Configuring
-[postfix]:    http://www.postfix.org
-[pf-book]:    http://www.postfix-book.com
-[pf-addr]:    http://www.postfix.org/ADDRESS_REWRITING_README.html
-[pf-ldap]:    http://www.postfix.org/LDAP_README.html#example_virtual
-[dovecot]:    http://www.dovecot.org
-[courier]:    http://www.courier-mta.org/imap
-[horde]:      http://www.horde.org
-[openldap]:   http://www.openldap.org
-[owncloud]:   http://www.owncloud.org
-[zytrax]:     http://zytrax.com/books/ldap
-[zytrax-olc]: http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas "OLC: OnLine Configuration, a feature of newer OpenLDAP versions"
-[guide]:      https://help.ubuntu.com/12.04/serverguide/index.html
-[dry]:        http://en.wikipedia.org/wiki/Don't_repeat_yourself
-[phpmyadmin]: http://www.phpmyadmin.net
-
-
+[sshd-docs]:    https://help.ubuntu.com/community/SSH/OpenSSH/Configuring
+[postfix]:      http://www.postfix.org
+[pf-book]:      http://www.postfix-book.com
+[pf-addr]:      http://www.postfix.org/ADDRESS_REWRITING_README.html
+[pf-ldap]:      http://www.postfix.org/LDAP_README.html#example_virtual
+[dovecot]:      http://www.dovecot.org
+[courier]:      http://www.courier-mta.org/imap
+[horde]:        http://www.horde.org
+[openldap]:     http://www.openldap.org
+[owncloud]:     http://www.owncloud.org
+[zytrax]:       http://zytrax.com/books/ldap
+[zytrax-olc]:   http://www.zytrax.com/books/ldap/ch6/slapd-config.html#use-schemas "OLC: OnLine Configuration, a feature of newer OpenLDAP versions"
+[guide]:        https://help.ubuntu.com/12.04/serverguide/index.html
+[dry]:          http://en.wikipedia.org/wiki/Don't_repeat_yourself
+[phpmyadmin]:   http://www.phpmyadmin.net
+[bovender]:     http://www.bovender.de
+[MIT license]:  http://opensource.org/licenses/mit-license.php
+[Ubuntu Linux]: http://www.ubuntu.com/business/server/overview
+[downloaded ISO file]: http://www.ubuntu.com/download/server
+[oc-post]:      http://www.xlboolbox.net/blog/2015/07/uprading-owncloud-fixing-could-not-acquire-lock-error.html
 
 <!-- vim:set tw=70 ts=4 sw=4 sts=4 et fo=tcroqn : -->
