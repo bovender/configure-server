@@ -1,7 +1,7 @@
-Configure-server Bash shell script
+configure-server Bash shell script
 ==================================
 
-The configure-server script automagically configures a remote [Ubuntu
+The __configure-server__ script automagically configures a remote [Ubuntu
 Linux][] or Debian Server. Specifically, it has been used by the author
 to set up a Ubuntu 14.04 LTS server, but other versions should work as
 well, maybe with minor modifications.
@@ -25,6 +25,8 @@ other services:
 __DISCLAIMER: USE THIS SCRIPT AT YOUR OWN RISK! I ASSUME NO
 RESPONSIBILITY OR LIABILITY FOR ANY LOSS OF DATA, COMPROMISE OF
 PRIVACY, OR ANY OTHER MISHAP THAT MAY RESULT FROM USING THIS SCRIPT.__
+
+The script won't touch configuration files twice.
 
 
 Supported operating systems
@@ -66,16 +68,16 @@ Install Ubuntu Server Edition on your server in the usual way. During
 installation you should indicate that you want a LAMP stack, an SSH
 server, and an internet mail system, i.e. Postfix. (It's up to you to
 install other services right away such as Samba, but the
-`configure-server` script won't deal with those.)
+__configure-server__ script won't deal with those.)
 
 
 #### Understanding key user accounts
 
 The user account that is created by the Ubuntu installer is only
 needed for low-level administrative work on the server (such as
-running the `configure-server` script). Therefore, you can (and
+running the __configure-server__ script). Therefore, you can (and
 should) use a complicated password (and maybe even complicated user
-name). The `configure-server` script will set up an LDAP directory for
+name). The __configure-server__ script will set up an LDAP directory for
 actual user management on the server, and this LDAP directory will be
 populated with a main user (admin user) that serves as administrator
 for e.g. Horde. The main user account stored in the LDAP directory has
@@ -297,7 +299,74 @@ set up as local delivery agent, Postfix will *never* consult
 
 #### Postfix address rewriting and aliases
 
+__configure-server__ sets up Postfix address rewriting in a way that
+permits multiple e-mail addresses as well as simple forwarding to
+external e-mail addresses for each user in the LDAP directory.
 
+In order to understand what is happening, the [Postfix
+address rewriting README][pf-addr] is really a must-read.
+
+Keep in mind that __configure-server__ expects you to put only the
+local part of the e-mail addresses into your LDAP directory.
+
+Example:
+
+> User 'daniel' has an entry 'cn=daniel,ou=users,dc=example,dc=com' in
+> the LDAP directory.
+
+> daniel's e-mail address shall be 'dk@example.com'.
+
+> Thus, the `mail` attribute must be just 'dk', without the trailing
+> '@example.com'. 
+
+This is how __configure-server__ sets up Postfix' address rewriting:
+
+When Postfix receives an e-mail, it consults `virtual_alias_maps`,
+which searches for the local part of the e-mail address (in the above
+example, this would be 'dk') in the `mail` and `mailLocalAddress`
+attributes of all users, and returns the `mailRoutingAddress` value of
+all matching users.
+
+The `mailRoutingAddress` may either contain the local part of the
+e-mail address (e.g., 'dk') again, or a fully qualified, external
+e-mail address (e.g., 'daniel@some.free.mail.provider').
+
+If an address in the `mailRoutingAddress` attribute is an external
+e-mail, the mail is forwarded by Postfix to that external address.
+
+If the address in the `mailRoutingAddress` attribute is a local
+e-mail, the address will be rewritten to the canonical form and
+delivered locally. To determine whether an address is a local address,
+`local_recipient_maps` is consulted, which looks up the address in the
+`mail` and `mailLocalAddress` attributes of the known users. Upon
+success, `canonical_maps` is consulted, which performs another LDAP
+lookup, this time searching the `mail` attributes and returning the
+user name from the `uid` attribute. (If you look at the file
+`postfix-ldap-canonical-map.cf`, you will notice that it is actually
+the query that contains the `uid` field and the result that has
+`mail`, but believe me, for the purpose of address rewriting of
+_incoming_ e-mails, the lookup is actually performed the other way
+round.)
+
+All this address rewriting may seem overly complicated. In fact, it
+_is_ very complicated. However, it enables me to:
+
+1. Not expose the user names in e-mail addresses. I consider this a
+   security risk. Maybe it's just a small risk, but knowing the user
+   name of a user name/password combination if halfway to a break-in.
+
+2. Give one user multiple alternative e-mail addresses (by adding
+   multiple `mailLocalAddress` attributes to the user's LDAP entry).
+   this is handy for aliases such as `root`, `postmaster` etc.
+
+3. Deliver e-mails that were sent to one address to multiple local
+   users. These users simply need to have `mailLocalAddress`
+   attributes with the desired shared address (e.g., `family`).
+
+4. Easily set up forwarding addresses by putting an external address
+   into a user's `mailRoutingAddress` attribute (e.g. for a family
+   member who does not actually use any of the web services of the
+   server, such as Horde webmail).
 
 
 ### Horde Webmail ###
@@ -327,9 +396,9 @@ Thus, if you have `$domain=example` and `$tld=com`, the resulting web
 addresses for your applications are `horde.example.com` and
 `cloud.example.com`.
 
-Whenever the `configure-server` script is run, it creates new random
+Whenever the __configure-server__ script is run, it creates new random
 passwords for the two MySQL users. The passwords are mailed to the
-master user, and they are also stored in `~/readme-configure-server`.
+master user, and they are also stored in `~/readme-__configure-server__`.
 Make sure to delete this file and the mail once you have memorized the
 passwords!
 
@@ -345,7 +414,7 @@ to the server and extract the archive into `/var/`:
 subfolders as described in the OwnCloud administrator's manual! [This
 blog post][oc-post] is a good summary.
 
-Then, enable the Apache site that `configure-server` has already set
+Then, enable the Apache site that __configure-server__ has already set
 up for you:
 
     sudo a2ensite owncloud.config
@@ -379,10 +448,17 @@ Known issues/Todo
 - put ldaps://636 
 
 
+Feedback
+--------
+
+Feedback is most welcome! Either use the GitHub issue tracking system,
+or e-mail me at daniel 'at' bovender 'dot' de.
+
+
 Addendum: Securing phpMyAdmin
 -----------------------------
 
-`configure-server` apt-get-installs [phpMyAdmin][] for you and enables
+__configure-server__ apt-get-installs [phpMyAdmin][] for you and enables
 the 'ForceSSL' option (by adding a line to
 `/etc/phpmyadmin/config.inc.php`). However, this still leaves your
 phpMyAdmin login screen vulnerable for password hacking, since anybody
@@ -438,7 +514,7 @@ always connected to the internet, and if it is, it may use wireless or
 ethernet. Using a host-only adapter allows me to have my own 'virtual'
 network regardless of whether my laptop is online or not.
 
-If you run the `configure-server` script in the VirtualBox terminal
+If you run the __configure-server__ script in the VirtualBox terminal
 (i.e., not in an SSH session), the script will detect that it is
 running in a VirtualBox system and install the Guest Additions,
 provided the installer has been virtually 'inserted' into the virtual
@@ -474,7 +550,7 @@ ethX` line in `/etc/network/interfaces` on the server). This prevents
 the server from spending a long time waiting for network information
 on startup when my laptop is not connected to the internet.
 
-Since the `configure-server` script needs to download a number of
+Since the __configure-server__ script needs to download a number of
 packages from the repositories, you need to bring up the internet
 connection:
 
