@@ -257,7 +257,7 @@ create_openssl_config() {
 		emailAddress           = ca@$SERVER_FQDN
 
 		[ usr_cert ]
-		basicConstraints       = CA:TRUE
+		basicConstraints       = CA:FALSE
 		nsCertType             = server, email
 		nsComment              = "Generated with OpenSSL by $(basename $0) ($HOMEPAGE)"
 		subjectKeyIdentifier   = hash
