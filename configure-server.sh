@@ -790,7 +790,7 @@ olcAccess: to dn.subtree="$LDAPADDRESSBOOKDN"
 # An owner of an entry may modify it (and so may the admin);
 # deny read access to non-authenticated entities
 olcAccess: to * 
- by dn=$HORDE_LDAP_USER manage 
+ by dn=$ADMINDN manage 
  by self write 
  by users read 
  by * none

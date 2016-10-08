@@ -1,3 +1,14 @@
+*Note: This script has served me well, but is outdated. I now use [Chef](//chef.io)
+to set up and manage my server. Chef has a rather steep learning curve and is
+primarily intended for administrators of entire server farms, but along with
+the [Knife solo](//matschaffer.github.io/knife-solo) tool it can also be used
+to set up a single server. Chef helps you to define exactly what your server
+should look like, much better than my simple script could ever do. I leave it here for
+reference and maybe to help server beginners just like I was; but I strongly
+encourage you to have a thorough look at [Chef](//chef.io). -- [Daniel](//bovender.de)*
+
+---
+
 configure-server Bash shell script
 ==================================
 
